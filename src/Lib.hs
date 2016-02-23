@@ -42,5 +42,5 @@ eval state (GroupLookup names keys) =
 
 emptyState = State { _clusters = Map.empty }
 
-addCluster :: State -> Identifier -> Cluster -> State
-addCluster state name cluster = clusters %~ Map.insert name cluster $ state
+addCluster :: Identifier -> Cluster -> State -> State
+addCluster name cluster state = clusters %~ Map.insert name cluster $ state
