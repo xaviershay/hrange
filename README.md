@@ -20,7 +20,7 @@ Range goals include:
 * Provide an API for requesting values over a range of clusters, replacing a
   common bash loop:
 
-    for x in $(erg -e %blah); do echo $x $(erg "$x"); done
+        for x in $(erg -e %blah); do echo $x $(erg "$x"); done
 
 
 ## Architecture differences from grange
