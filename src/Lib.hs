@@ -23,14 +23,12 @@ type Result = Set.Set Identifier
 data State = State { _clusters :: Map.Map Identifier Cluster }
 makeLenses ''State
 
-testCluster :: Cluster
-testCluster = Map.fromList [("cluster1", (Set.fromList [Const "a", Const "b"]))]
-
--- TODO: folding set union maybe not particularly efficient here, N+M on each fold?
+-- TODO: folding set union maybe not particularly efficient here, N+M on each
+-- fold?
 eval :: State -> Expression -> Result
 eval state (Const id) = Set.singleton id
 eval state (GroupLookup names keys) =
-  foldr (Set.union) (Set.empty) $
+  foldr Set.union Set.empty $
     Set.map (eval state) $
       state
         ^. clusters
@@ -43,4 +41,4 @@ eval state (GroupLookup names keys) =
 emptyState = State { _clusters = Map.empty }
 
 addCluster :: Identifier -> Cluster -> State -> State
-addCluster name cluster state = clusters %~ Map.insert name cluster $ state
+addCluster name cluster = clusters %~ Map.insert name cluster

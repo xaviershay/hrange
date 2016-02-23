@@ -13,4 +13,4 @@ state =
   emptyState
 
 main :: IO ()
-main = putStrLn . show $ eval state (GroupLookup (Const "hello") (Const "CLUSTER"))
+main = print $ eval state (GroupLookup (Const "hello") (Const "CLUSTER"))
