@@ -1,6 +1,46 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
+
 module Lib
-    ( someFunc
+    ( module Lib
     ) where
 
-someFunc :: IO ()
-someFunc = putStrLn "someFunc"
+import qualified Data.Text as T
+import qualified Data.Map as Map
+import qualified Data.Set as Set
+import Control.Lens hiding (Const)
+
+type Identifier = T.Text
+data Expression =
+  GroupLookup Expression Expression |
+  Const Identifier
+
+  deriving (Eq, Ord, Show)
+
+type Cluster = Map.Map Identifier (Set.Set Expression)
+type Result = Set.Set Identifier
+
+data State = State { _clusters :: Map.Map Identifier Cluster }
+makeLenses ''State
+
+testCluster :: Cluster
+testCluster = Map.fromList [("cluster1", (Set.fromList [Const "a", Const "b"]))]
+
+-- TODO: folding set union maybe not particularly efficient here, N+M on each fold?
+eval :: State -> Expression -> Result
+eval state (Const id) = Set.singleton id
+eval state (GroupLookup names keys) =
+  foldr (Set.union) (Set.empty) $
+    Set.map (eval state) $
+      state
+        ^. clusters
+        ^. at (Set.findMin nameSet) . non Map.empty
+        ^. at (Set.findMin keySet) . non Set.empty
+  where
+    nameSet = eval state names
+    keySet  = eval state keys
+
+emptyState = State { _clusters = Map.empty }
+
+addCluster :: State -> Identifier -> Cluster -> State
+addCluster state name cluster = clusters %~ Map.insert name cluster $ state
