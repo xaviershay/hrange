@@ -12,6 +12,9 @@ import Control.Lens hiding (Const)
 
 type Identifier = T.Text
 data Expression =
+  Intersect Expression Expression |
+  Subtract Expression Expression |
+  Union Expression Expression |
   GroupLookup Expression Expression |
   Const Identifier
 
@@ -27,6 +30,9 @@ makeLenses ''State
 -- fold?
 eval :: State -> Expression -> Result
 eval state (Const id) = Set.singleton id
+eval state (Union a b) = Set.union (eval state a) (eval state b)
+eval state (Intersect a b) = Set.intersection (eval state a) (eval state b)
+eval state (Subtract a b) = Set.difference (eval state a) (eval state b)
 eval state (GroupLookup names keys) =
   foldr Set.union Set.empty $
     Set.map (eval state) $

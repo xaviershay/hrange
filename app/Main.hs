@@ -13,4 +13,4 @@ state =
   emptyState
 
 main :: IO ()
-main = print $ eval state (GroupLookup (Const "hello") (Const "CLUSTER"))
+main = print $ eval state (Subtract (GroupLookup (Const "hello") (Const "CLUSTER")) (Const "a"))
