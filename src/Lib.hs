@@ -21,7 +21,9 @@ data Expression =
   Intersection Expression Expression |
   Difference Expression Expression |
   Union Expression Expression |
-  GroupLookup Expression Expression |
+  ClusterLookup Expression Expression |
+  Regexp Identifier | -- TODO: Native regex type
+  Product [Expression] |
   Const Identifier
 
   deriving (Eq, Ord, Show)
@@ -45,7 +47,7 @@ eval (Const id)         = return $ Set.singleton id
 eval (Union a b)        = liftM2 Set.union        (eval a) (eval b)
 eval (Intersection a b) = liftM2 Set.intersection (eval a) (eval b)
 eval (Difference a b)   = liftM2 Set.difference   (eval a) (eval b)
-eval (GroupLookup names keys) = do
+eval (ClusterLookup names keys) = do
   state   <- ask
   nameSet <- eval names
   keySet  <- eval keys
