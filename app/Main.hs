@@ -15,4 +15,4 @@ state =
 
 main :: IO ()
 --main = print $ runEval $ eval state (Difference (GroupLookup (Const "hello") (Const "CLUSTER")) (Const "a"))
-main = print $ runEval $ eval state (GroupLookup (Union (Const "hello") (Const "blah")) (Union (Const "ALL") (Const "CLUSTER")))
+main = print $ runEval state $ eval (GroupLookup (Union (Const "hello") (Const "blah")) (Union (Const "ALL") (Const "CLUSTER")))

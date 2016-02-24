@@ -13,6 +13,7 @@ import Control.Lens hiding (Const)
 
 import Control.Monad
 import           "mtl" Control.Monad.Identity
+import           "mtl" Control.Monad.Reader
 import Data.Foldable
 
 type Identifier = T.Text
@@ -31,24 +32,25 @@ type Result = Set.Set Identifier
 data State = State { _clusters :: Map.Map Identifier Cluster }
 makeLenses ''State
 
-type Eval a = Identity a
+type Eval a = ReaderT State Identity a
 
-runEval :: Eval a -> a
-runEval = runIdentity
+runEval :: State -> Eval a -> a
+runEval state e = runIdentity (runReaderT e state)
 
 -- http://stackoverflow.com/questions/13730439/mapm-for-data-set-in-haskell
 mapMSet f s = Set.fromList <$> mapM f (Set.toList s)
 
-eval :: State -> Expression -> Eval Result
-eval state (Const id)         = return $ Set.singleton id
-eval state (Union a b)        = liftM2 Set.union        (eval state a) (eval state b)
-eval state (Intersection a b) = liftM2 Set.intersection (eval state a) (eval state b)
-eval state (Difference a b)   = liftM2 Set.difference   (eval state a) (eval state b)
-eval state (GroupLookup names keys) = do
-  nameSet <- eval state names
-  keySet  <- eval state keys
+eval :: Expression -> Eval Result
+eval (Const id)         = return $ Set.singleton id
+eval (Union a b)        = liftM2 Set.union        (eval a) (eval b)
+eval (Intersection a b) = liftM2 Set.intersection (eval a) (eval b)
+eval (Difference a b)   = liftM2 Set.difference   (eval a) (eval b)
+eval (GroupLookup names keys) = do
+  state   <- ask
+  nameSet <- eval names
+  keySet  <- eval keys
 
-  results <- mapMSet (eval state) $
+  results <- mapMSet eval $
     foldMap (\name ->
       foldMap (\key ->
         state
