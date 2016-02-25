@@ -2,69 +2,43 @@ module Parser
     ( module Parser
     ) where
 
-
 import Lib
 
-import Text.Parsec
 import qualified Data.Text as T
 import Data.List (transpose)
-import Data.Maybe
+import Data.Maybe (fromMaybe)
+
+import Control.Applicative hiding (Const)
+-- Hide a few names that are provided by Applicative.
+import Text.Parsec hiding (many, optional, (<|>))
 
 parseRange :: String -> Either ParseError Expression
 parseRange input = parse rangeExpr input input
 
-rangeExpr = do
-  expr <- outerExpr
-  _ <- eof
+rangeExpr = outerExpr <* eof
 
-  return expr
+outerExpr =
+      try (joiner Union ',')
+  <|> try (joiner Intersection '&')
+  <|> try (joiner Difference '-')
+  <|> innerExpr
 
-outerExpr = do
-  expr <- try union <|> try difference <|> try intersection <|> innerExpr
-
-  return expr
-
-innerExpr = do
-  expr <- clusterLookup <|> clustersFunction <|> try parentheses <|> regex <|> constantQ <|> try function <|> constantQuotes <|> Parser.product
-  _ <- spaces
-
-  return expr
+innerExpr =
+  (   clusterLookup
+  <|> clustersFunction
+  <|> try parentheses
+  <|> regex
+  <|> constantQ
+  <|> try function
+  <|> constantQuotes
+  <|> Parser.product
+  ) <* spaces
 
 -- OUTER EXPRESSIONS
 
-parentheses = do
-  _    <- char '('
-  expr <- outerExpr
-  _    <- char ')'
+parentheses = char '(' *> outerExpr <* char ')'
 
-  return expr
-
-union = do
-  lhs <- innerExpr
-  _   <- many $ char ' '
-  sep <- char ','
-  _   <- many $ char ' '
-  rhs <- outerExpr
-
-  return $ Union lhs rhs
-
-intersection = do
-  lhs <- innerExpr
-  _   <- many $ char ' '
-  sep <- char '&'
-  _   <- many $ char ' '
-  rhs <- outerExpr
-
-  return $ Intersection lhs rhs
-
-difference = do
-  lhs <- innerExpr
-  _   <- many $ char ' '
-  sep <- char '-'
-  _   <- many $ char ' '
-  rhs <- outerExpr
-
-  return $ Difference lhs rhs
+joiner t c  = t <$> innerExpr <* spaces <* char c <* spaces <*> outerExpr
 
 -- INNER EXPRESSIONS
 
@@ -75,47 +49,26 @@ clusterLookup = do
 
   return $ ClusterLookup names (fromMaybe (Const (T.pack "CLUSTER")) keys)
 
-keys = do
-  _ <- char ':'
-  innerExpr
+keys = char ':' *> innerExpr
 
-function = do
-  name <- try (many1 alphaNum)
-  _    <- char '('
-  args <- outerExpr `sepBy` char ';'
-  _    <- char ')'
+function = mkFunction <$>
+  try (many1 alphaNum) <* char '(' <*>
+  outerExpr `sepBy` char ';' <* char ')'
 
-  return $ Function (T.pack name) args
+  where
+    mkFunction n = Function (T.pack n)
 
-clustersFunction = do
-  _ <- char '*'
-  expr <- innerExpr
-
-  return $ Function (T.pack "clusters") [expr]
+clustersFunction = mkClusters <$> (char '*' *> innerExpr)
+  where
+    mkClusters expr = Function (T.pack "clusters") [expr]
 
 -- IDENTIFIERS
 
-regex = do
-  _ <- char '/'
-  r <- many (noneOf "/") -- TODO: Allow escaping?
-  _ <- char '/'
-
-  -- TODO: Pull in a regex library and use native type here
-  return $ Regexp (T.pack r)
-
-constantQ = do
-  _ <- string "q("
-  q <- many (noneOf ")") -- TODO: Is this right?
-  _ <- char ')'
-
-  return $ Const (T.pack q)
-
-constantQuotes = do
-  _ <- char '"'
-  q <- many (noneOf "\"") -- TODO: Is this right?
-  _ <- char '"'
-
-  return $ Const (T.pack q)
+-- TODO: Allow escaping?
+-- TODO: Actual regex rather than packing to identifier
+regex = Regexp . T.pack <$> (char '/' *> many (noneOf "/") <* char '/')
+constantQ      = Const . T.pack <$> (string "q(" *> many (noneOf ")") <* char ')')
+constantQuotes = Const . T.pack <$> (string "\"" *> many (noneOf "\"") <* char '"')
 
 product = do
   exprs <- many1 (try numericRange <|> try identifier <|> productBraces)
@@ -129,24 +82,15 @@ product = do
     else
       Product exprs
 
-numericRange = do
-  prefix  <- many letter
-  lower   <- many1 digit
-  _       <- string ".."
-  prefix2 <- many letter
-  upper   <- many1 digit
-
-  let commonPrefix = commonSuffix [prefix, prefix2]
-
-  -- TODO: Ensure len lower <= len upper by rebalancing into prefix. Then cast
-  -- to int.
-  return $ NumericRange
-    (T.pack commonPrefix)
-    (T.pack lower)
-    (T.pack upper)
-
+numericRange = mkRange <$> many letter <*> many1 digit <* string ".." <*> many letter <*> many1 digit
   where
     fromConst (Const x) = x
+    mkRange prefix lower prefix2 upper =
+      let commonPrefix = commonSuffix [prefix, prefix2] in
+
+      -- TODO: Ensure len lower <= len upper by rebalancing into prefix. Then cast
+      -- to int.
+      NumericRange (T.pack commonPrefix) (T.pack lower) (T.pack upper)
 
 
 -- TODO: quick check and stuff
@@ -154,13 +98,7 @@ commonSuffix :: [String] -> String
 commonSuffix xs = map head . takeWhile (\(c:cs) -> (length cs) == l && all (== c) cs) . transpose $ xs
   where l = length xs - 1
 
-productBraces = do
-  lhs  <- char '{'
-  expr <- outerExpr
-  rhs  <- char '}'
+productBraces = char '{' *> outerExpr <* char '}'
 
-  return expr
-
-identifier = do
-  ident <- many1 $ alphaNum <|> oneOf "-_:."
-  return $ Const (T.pack ident)
+-- TODO: More chars here maybe
+identifier = Const . T.pack <$> many1 (alphaNum <|> oneOf "-_:.")
