@@ -25,7 +25,7 @@ outerExpr = do
   return expr
 
 innerExpr = do
-  expr <- clusterLookup <|> clustersFunction <|> try parentheses <|> constantQ <|> try function <|> constantQuotes <|> Parser.product
+  expr <- clusterLookup <|> clustersFunction <|> try parentheses <|> regex <|> constantQ <|> try function <|> constantQuotes <|> Parser.product
   _ <- spaces
 
   return expr
@@ -95,6 +95,14 @@ clustersFunction = do
 
 -- IDENTIFIERS
 
+regex = do
+  _ <- char '/'
+  r <- many (noneOf "/") -- TODO: Allow escaping?
+  _ <- char '/'
+
+  -- TODO: Pull in a regex library and use native type here
+  return $ Regexp (T.pack r)
+
 constantQ = do
   _ <- string "q("
   q <- many (noneOf ")") -- TODO: Is this right?
@@ -156,40 +164,3 @@ productBraces = do
 identifier = do
   ident <- many1 $ alphaNum <|> oneOf "-_:."
   return $ Const (T.pack ident)
-
-
-
---
---union = do
---  lhs <- subExpr
---  _   <- many $ char ' '
---  sep <- char ','
---  _   <- many $ char ' '
---  rhs <- rangeExpr
---
---  return $ Union lhs rhs
---
---
---
---regex = do
---  _ <- char '/'
---  (Const x) <- constant -- TODO: This is messy, refactor
---  _ <- char '/'
---
---  return $ Regexp x
---
---subExpr = do
---  expr <- clusterLookup <|> Parser.product
---  _    <- optionMaybe eof
---  return expr
---
---rangeExpr = do
---  expr <- try union <|> try intersection <|> try difference <|> regex <|> subExpr
---
---  return expr
---
---outerExpr = do
---  expr <- rangeExpr
---  _    <- eof
---
---  return expr

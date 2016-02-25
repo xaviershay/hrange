@@ -19,6 +19,8 @@ import System.Environment (lookupEnv)
 
 type RangeSpec = M.Map String [S.Set String]
 
+-- TODO: Error on spec parse failure
+-- TODO: Warn when RANGE_SPEC_PATH not set
 main :: IO ()
 main = do
   specPath <- lookupEnv "RANGE_SPEC_PATH"
@@ -26,9 +28,7 @@ main = do
 
   contents <- mapM readFile specs
 
-  defaultMain (tests $ rights (map parseSpec (zip specs contents)))
-
-  where
+  defaultMain (tests $ rights (zipWith (curry parseSpec) specs contents))
 
 eol = char '\n'
 
@@ -49,12 +49,9 @@ rangeSingleSpec = do
   spec <- many (comment <|> line)
   _    <- optionMaybe eol
 
-  return $ (fromJust expr, S.fromList . catMaybes $ spec)
+  return (fromJust expr, S.fromList . catMaybes $ spec)
 
-rangeSpec = do
-  specs <- many rangeSingleSpec
-
-  return $ specs
+rangeSpec = many rangeSingleSpec
 
 parseSpec :: (String, String) -> Either ParseError [(String, S.Set String)]
 parseSpec (name, input) = parse rangeSpec name input
