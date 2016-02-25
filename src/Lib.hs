@@ -23,7 +23,9 @@ data Expression =
   Union Expression Expression |
   ClusterLookup Expression Expression |
   Regexp Identifier | -- TODO: Native regex type
+  Function Identifier [Expression] |
   Product [Expression] |
+  NumericRange Identifier Identifier Identifier |
   Const Identifier
 
   deriving (Eq, Ord, Show)

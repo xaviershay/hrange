@@ -6,21 +6,111 @@ module Parser
 import Lib
 
 import Text.Parsec
-import Data.Text as T
+import qualified Data.Text as T
+import Data.List (transpose)
 import Data.Maybe
 
--- TODO: Delete all this and start again with range-spec
--- This is all just a sketch to learn parsec
+parseRange :: String -> Either ParseError Expression
+parseRange input = parse rangeExpr input input
 
-constantBraces = do
-  lhs <- char '{'
-  expr <- rangeExpression
-  rhs <- char '}'
+rangeExpr = do
+  expr <- outerExpr
+  _ <- eof
 
   return expr
 
+outerExpr = do
+  expr <- try union <|> try difference <|> try intersection <|> innerExpr
+
+  return expr
+
+innerExpr = do
+  expr <- clusterLookup <|> clustersFunction <|> try parentheses <|> constantQ <|> try function <|> constantQuotes <|> Parser.product
+  _ <- spaces
+
+  return expr
+
+-- OUTER EXPRESSIONS
+
+parentheses = do
+  _    <- char '('
+  expr <- outerExpr
+  _    <- char ')'
+
+  return expr
+
+union = do
+  lhs <- innerExpr
+  _   <- many $ char ' '
+  sep <- char ','
+  _   <- many $ char ' '
+  rhs <- outerExpr
+
+  return $ Union lhs rhs
+
+intersection = do
+  lhs <- innerExpr
+  _   <- many $ char ' '
+  sep <- char '&'
+  _   <- many $ char ' '
+  rhs <- outerExpr
+
+  return $ Intersection lhs rhs
+
+difference = do
+  lhs <- innerExpr
+  _   <- many $ char ' '
+  sep <- char '-'
+  _   <- many $ char ' '
+  rhs <- outerExpr
+
+  return $ Difference lhs rhs
+
+-- INNER EXPRESSIONS
+
+clusterLookup = do
+  first <- char '%'
+  names <- innerExpr
+  keys  <- optionMaybe keys
+
+  return $ ClusterLookup names (fromMaybe (Const (T.pack "CLUSTER")) keys)
+
+keys = do
+  _ <- char ':'
+  innerExpr
+
+function = do
+  name <- try (many1 alphaNum)
+  _    <- char '('
+  args <- outerExpr `sepBy` char ';'
+  _    <- char ')'
+
+  return $ Function (T.pack name) args
+
+clustersFunction = do
+  _ <- char '*'
+  expr <- innerExpr
+
+  return $ Function (T.pack "clusters") [expr]
+
+-- IDENTIFIERS
+
+constantQ = do
+  _ <- string "q("
+  q <- many (noneOf ")") -- TODO: Is this right?
+  _ <- char ')'
+
+  return $ Const (T.pack q)
+
+constantQuotes = do
+  _ <- char '"'
+  q <- many (noneOf "\"") -- TODO: Is this right?
+  _ <- char '"'
+
+  return $ Const (T.pack q)
+
 product = do
-  exprs <- many1 (try constant <|> constantBraces)
+  exprs <- many1 (try numericRange <|> try identifier <|> productBraces)
   return $
     -- This conditional isn't strictly required, but makes reading parse trees
     -- much easier.  Potentially consider moving optimizations into another
@@ -31,70 +121,75 @@ product = do
     else
       Product exprs
 
-constant = do
-  ident <- many1 $ (alphaNum <|> char '-')
-  return $ Const (pack ident)
+numericRange = do
+  prefix  <- many letter
+  lower   <- many1 digit
+  _       <- string ".."
+  prefix2 <- many letter
+  upper   <- many1 digit
 
-keys = do
-  _ <- char ':'
-  subExpression
+  let commonPrefix = commonSuffix [prefix, prefix2]
 
-clusterLookup = do
-  first <- char '%'
-  names <- subExpression
-  keys  <- optionMaybe keys
+  -- TODO: Ensure len lower <= len upper by rebalancing into prefix. Then cast
+  -- to int.
+  return $ NumericRange
+    (T.pack commonPrefix)
+    (T.pack lower)
+    (T.pack upper)
 
-  return $ ClusterLookup names (fromMaybe (Const (T.pack "CLUSTER")) keys)
+  where
+    fromConst (Const x) = x
 
-union = do
-  lhs <- subExpression
-  _   <- many $ char ' '
-  sep <- char ','
-  _   <- many $ char ' '
-  rhs <- rangeExpression
 
-  return $ Union lhs rhs
+-- TODO: quick check and stuff
+commonSuffix :: [String] -> String
+commonSuffix xs = map head . takeWhile (\(c:cs) -> (length cs) == l && all (== c) cs) . transpose $ xs
+  where l = length xs - 1
 
-intersection = do
-  lhs <- subExpression
-  _   <- many $ char ' '
-  sep <- char '&'
-  _   <- many $ char ' '
-  rhs <- rangeExpression
-
-  return $ Intersection lhs rhs
-
-difference = do
-  lhs <- subExpression
-  _   <- many $ char ' '
-  sep <- char '-'
-  _   <- many $ char ' '
-  rhs <- rangeExpression
-
-  return $ Difference lhs rhs
-
-regex = do
-  _ <- char '/'
-  (Const x) <- constant -- TODO: This is messy, refactor
-  _ <- char '/'
-
-  return $ Regexp x
-
-subExpression = do
-  expr <- clusterLookup <|> Parser.product
-  _    <- optionMaybe eof
-  return expr
-
-rangeExpression = do
-  expr <- try union <|> try intersection <|> try difference <|> regex <|> subExpression
+productBraces = do
+  lhs  <- char '{'
+  expr <- outerExpr
+  rhs  <- char '}'
 
   return expr
 
-outerExpression = do
-  expr <- rangeExpression
-  _    <- eof
+identifier = do
+  ident <- many1 $ alphaNum <|> oneOf "-_:."
+  return $ Const (T.pack ident)
 
-  return expr
 
-parseRange :: String -> Either ParseError Expression
-parseRange input = parse outerExpression input input
+
+--
+--union = do
+--  lhs <- subExpr
+--  _   <- many $ char ' '
+--  sep <- char ','
+--  _   <- many $ char ' '
+--  rhs <- rangeExpr
+--
+--  return $ Union lhs rhs
+--
+--
+--
+--regex = do
+--  _ <- char '/'
+--  (Const x) <- constant -- TODO: This is messy, refactor
+--  _ <- char '/'
+--
+--  return $ Regexp x
+--
+--subExpr = do
+--  expr <- clusterLookup <|> Parser.product
+--  _    <- optionMaybe eof
+--  return expr
+--
+--rangeExpr = do
+--  expr <- try union <|> try intersection <|> try difference <|> regex <|> subExpr
+--
+--  return expr
+--
+--outerExpr = do
+--  expr <- rangeExpr
+--  _    <- eof
+--
+--  return expr
