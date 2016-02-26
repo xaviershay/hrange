@@ -11,6 +11,7 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Control.Lens hiding (Const)
 
+import Control.Applicative ((<$>), (<*>))
 import Control.Monad
 import           "mtl" Control.Monad.Identity
 import           "mtl" Control.Monad.Reader
@@ -31,6 +32,8 @@ data Expression =
   deriving (Eq, Ord, Show)
 
 type Cluster = Map.Map Identifier (Set.Set Expression)
+-- TODO: newtype this and provide union/intersect implementations to abstract
+-- away Set type. Need benchmarks to work with first.
 type Result = Set.Set Identifier
 
 data State = State { _clusters :: Map.Map Identifier Cluster }
@@ -46,9 +49,9 @@ mapMSet f s = Set.fromList <$> mapM f (Set.toList s)
 
 eval :: Expression -> Eval Result
 eval (Const id)         = return $ Set.singleton id
-eval (Union a b)        = liftM2 Set.union        (eval a) (eval b)
-eval (Intersection a b) = liftM2 Set.intersection (eval a) (eval b)
-eval (Difference a b)   = liftM2 Set.difference   (eval a) (eval b)
+eval (Union a b)        = Set.union        <$> eval a <*> eval b
+eval (Intersection a b) = Set.intersection <$> eval a <*> eval b
+eval (Difference a b)   = Set.difference   <$> eval a <*> eval b
 eval (ClusterLookup names keys) = do
   state   <- ask
   nameSet <- eval names
