@@ -64,6 +64,7 @@ eval (ClusterLookup names keys) = do
   -- TODO: folding set union maybe not particularly efficient here, N+M on each
   -- fold?
   return $ foldr Set.union Set.empty results
+eval _ = return $ Set.empty
 
 clusterLookupKey :: State -> Identifier -> Identifier -> Set.Set Expression
 clusterLookupKey state name "KEYS" =

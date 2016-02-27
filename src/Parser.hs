@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Parser
     ( module Parser
     ) where
@@ -24,7 +25,9 @@ outerExpr =
   <|> try (joiner Difference '-')
   <|> innerExpr
 
-innerExpr =
+innerExpr = innerExprWithExcludes ""
+innerExprCluster = innerExprWithExcludes ":"
+innerExprWithExcludes excludes =
   (   clusterLookup
   <|> clustersFunction
   <|> try parentheses
@@ -32,7 +35,7 @@ innerExpr =
   <|> constantQ
   <|> try function
   <|> constantQuotes
-  <|> Parser.product
+  <|> Parser.product excludes
   ) <* spaces
 
 -- OUTER EXPRESSIONS
@@ -45,23 +48,11 @@ joiner t c  = t <$> innerExpr <* spaces <* char c <* spaces <*> outerExpr
 
 clusterLookup = do
   first <- char '%'
-  names <- innerExpr
+  names <- innerExprCluster
   keys  <- optionMaybe keys
 
-  let (names', keys') = case names of
-                          Const x -> parseKeyFromId x
-                          _       -> (names, fromMaybe (Const "CLUSTER") keys)
+  return $ ClusterLookup names (fromMaybe (Const "CLUSTER") keys)
 
-  return $ ClusterLookup names' keys'
-
-parseKeyFromId x =
-  if length tokens == 1 then
-    (Const x, Const "CLUSTER")
-  else
-    --(Const . T.intercalate ":" . reverse . drop 1 . reverse $ tokens, Const . last $ tokens)
-    (Const . head $ tokens, Const . T.intercalate ":" . drop 1 $ tokens)
-  where
-    tokens = T.splitOn ":" x
 keys = char ':' *> innerExpr
 
 function = mkFunction <$>
@@ -83,8 +74,8 @@ regex = Regexp . T.pack <$> (char '/' *> many (noneOf "/") <* char '/')
 constantQ      = Const . T.pack <$> (string "q(" *> many (noneOf ")") <* char ')')
 constantQuotes = Const . T.pack <$> (string "\"" *> many (noneOf "\"") <* char '"')
 
-product = do
-  exprs <- many1 (try numericRange <|> try identifier <|> productBraces)
+product excludes = do
+  exprs <- many1 (try numericRange <|> try (identifier excludes) <|> productBraces)
   return $
     -- This conditional isn't strictly required, but makes reading parse trees
     -- much easier.  Potentially consider moving optimizations into another
@@ -113,5 +104,11 @@ commonSuffix xs = map head . takeWhile (\(c:cs) -> (length cs) == l && all (== c
 
 productBraces = char '{' *> outerExpr <* char '}'
 
+-- http://www.rosettacode.org/wiki/Strip_a_set_of_characters_from_a_string#Haskell
+stripChars :: String -> String -> String
+stripChars = filter . flip notElem
+
 -- TODO: More chars here maybe
-identifier = Const . T.pack <$> many1 (alphaNum <|> oneOf "-_:.")
+identifier excludes = Const . T.pack <$> many1 (alphaNum <|> oneOf punctuation)
+  where
+    punctuation = stripChars excludes "-_:."
