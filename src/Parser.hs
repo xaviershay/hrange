@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Parser
     ( module Parser
     ) where
@@ -47,8 +48,20 @@ clusterLookup = do
   names <- innerExpr
   keys  <- optionMaybe keys
 
-  return $ ClusterLookup names (fromMaybe (Const (T.pack "CLUSTER")) keys)
+  let (names', keys') = case names of
+                          Const x -> parseKeyFromId x
+                          _       -> (names, fromMaybe (Const "CLUSTER") keys)
 
+  return $ ClusterLookup names' keys'
+
+parseKeyFromId x =
+  if length tokens == 1 then
+    (Const x, Const "CLUSTER")
+  else
+    --(Const . T.intercalate ":" . reverse . drop 1 . reverse $ tokens, Const . last $ tokens)
+    (Const . head $ tokens, Const . T.intercalate ":" . drop 1 $ tokens)
+  where
+    tokens = T.splitOn ":" x
 keys = char ':' *> innerExpr
 
 function = mkFunction <$>

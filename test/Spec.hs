@@ -17,13 +17,14 @@ import qualified Data.Map as M
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Set as S
 import qualified Data.Vector as V
-
 import qualified Data.Yaml as Y
+import Data.Scientific (toBoundedInteger, isInteger, Scientific)
 
 import Lib
 import Parser
 
 import System.Environment (lookupEnv)
+
 
 type RangeSpec = M.Map String [S.Set String]
 
@@ -35,12 +36,17 @@ instance Y.FromJSON RawCluster where
 
 parseKey :: Y.Value -> Y.Parser [T.Text]
 parseKey (Y.String x) = return [x]
-parseKey (Y.Number x) = return [T.pack . show $ x]
+parseKey (Y.Number x) = return [T.pack . formatScientific $ x]
 parseKey (Y.Bool x)   = return [T.pack . show $ x]
-parseKey (Y.Null)     = return []
 parseKey (Y.Object _) = fail "Nested objects not allowed"
 parseKey (Y.Array xs) = concat <$> mapM parseKey (V.toList xs)
+parseKey Y.Null       = return []
 
+formatScientific :: Scientific -> String
+formatScientific x = if isInteger x then
+                       show $ fromJust (toBoundedInteger x :: Maybe Int)
+                     else
+                       show x
 
 -- TODO: Error on spec parse failure
 -- TODO: Warn when RANGE_SPEC_PATH not set
@@ -56,7 +62,7 @@ main = do
   -- TODO: Error on bad clusters
   let parsedClusters = zip yamls (map parseCluster clusters)
 
-  let parsedClusters' = (M.fromListWith M.union (map (\(k, v) -> (takeDirectory k, M.singleton (T.pack . takeBaseName $ k) (fromRight v))) parsedClusters))
+  let parsedClusters' = M.fromListWith M.union (map (\(k, v) -> (takeDirectory k, M.singleton (T.pack . takeBaseName $ k) (fromRight v))) parsedClusters)
 
   let parsedSpecs = rights (zipWith (curry parseSpec) specs contents)
   --putStrLn $ ppShow parsedSpecs
@@ -76,7 +82,7 @@ parseCluster (Just xs) = if null errors then
 
   where
     errors = concatMap lefts $ M.elems parsedMap
-    parsedMap = M.map (\x -> map (parseRange . show) x) xs
+    parsedMap = M.map (map $ parseRange . show) xs
 
 eol = char '\n'
 
@@ -120,7 +126,7 @@ specTest state (expr, expected) =
     step "Parsing"
     assert $ isRight actual
 
-    step "Evaluating"
+    step $ "Evaluating " ++ show (fromRight actual)
     expected @=? results
   where
     actual = parseRange expr

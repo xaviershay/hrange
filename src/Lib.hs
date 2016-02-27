@@ -59,16 +59,23 @@ eval (ClusterLookup names keys) = do
 
   results <- mapMSet eval $
     foldMap (\name ->
-      foldMap (\key ->
-        state
-          ^. clusters
-          ^. at name . non Map.empty
-          ^. at key . non Set.empty
-          ) keySet) nameSet
+      foldMap (clusterLookupKey state name) keySet) nameSet
 
   -- TODO: folding set union maybe not particularly efficient here, N+M on each
   -- fold?
   return $ foldr Set.union Set.empty results
+
+clusterLookupKey :: State -> Identifier -> Identifier -> Set.Set Expression
+clusterLookupKey state name "KEYS" =
+  Set.fromList $ map Const $ Map.keys $ state
+    ^. clusters
+    ^. at name . non Map.empty
+
+clusterLookupKey state name key =
+  state
+    ^. clusters
+    ^. at name . non Map.empty
+    ^. at key . non Set.empty
 
 emptyState = State { _clusters = Map.empty }
 
