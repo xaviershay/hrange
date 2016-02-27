@@ -55,6 +55,14 @@ eval (Const id)         = return $ S.singleton id
 eval (Union a b)        = S.union        <$> eval a <*> eval b
 eval (Intersection a b) = S.intersection <$> eval a <*> eval b
 eval (Difference a b)   = S.difference   <$> eval a <*> eval b
+eval (Product xs) = do
+  results <- mapM eval xs
+
+  let asList   = map S.toList results :: [[Identifier]]
+  let combined = map T.concat $ sequence asList :: [Identifier]
+
+  return . S.fromList $ combined
+
 eval (ClusterLookup names keys) = do
   state   <- ask
   nameSet <- eval names
@@ -66,7 +74,7 @@ eval (ClusterLookup names keys) = do
 
   -- TODO: folding set union maybe not particularly efficient here?
   return $ foldr S.union S.empty results
-eval _ = return $ S.empty
+eval _ = return S.empty
 
 clusterLookupKey :: State -> Identifier -> Identifier -> S.HashSet Expression
 clusterLookupKey state name "KEYS" =
