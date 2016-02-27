@@ -13,6 +13,7 @@ import Data.Maybe (fromMaybe)
 import Control.Applicative hiding (Const)
 -- Hide a few names that are provided by Applicative.
 import Text.Parsec hiding (many, optional, (<|>))
+import Text.Parsec.Expr
 
 parseRange :: String -> Either ParseError Expression
 parseRange input = parse rangeExpr input input
@@ -20,10 +21,18 @@ parseRange input = parse rangeExpr input input
 rangeExpr = outerExpr <* eof
 
 outerExpr =
-      try (joiner Union ',')
-  <|> try (joiner Intersection '&')
-  <|> try (joiner Difference '-')
+      try expr
   <|> innerExpr
+
+expr    = buildExpressionParser table innerExpr
+         <?> "expression"
+
+table = [ [binary "," Union AssocLeft]
+        , [binary "&" Intersection AssocLeft]
+        , [binary "-" Difference AssocLeft]
+        ]
+
+binary name fun assoc = Infix (do{ string name; spaces; return fun }) assoc
 
 innerExpr = innerExprWithExcludes ""
 innerExprCluster = innerExprWithExcludes ":"
