@@ -1,14 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE PackageImports #-} -- TODO: Understand what this doe
+{-# LANGUAGE DeriveGeneric #-}
 
 module Lib
     ( module Lib
     ) where
 
 import qualified Data.Text as T
-import qualified Data.Map as Map
-import qualified Data.Set as Set
+import qualified Data.HashMap.Strict as M
+import qualified Data.HashSet as S
 import Control.Lens hiding (Const)
 
 import Control.Applicative ((<$>), (<*>))
@@ -16,6 +17,9 @@ import Control.Monad
 import           "mtl" Control.Monad.Identity
 import           "mtl" Control.Monad.Reader
 import Data.Foldable
+import Data.Hashable
+
+import GHC.Generics
 
 type Identifier = T.Text
 data Expression =
@@ -29,14 +33,16 @@ data Expression =
   NumericRange Identifier Identifier Identifier |
   Const Identifier
 
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Show, Generic)
 
-type Cluster = Map.Map Identifier (Set.Set Expression)
+instance Hashable Expression
+
+type Cluster = M.HashMap Identifier (S.HashSet Expression)
 -- TODO: newtype this and provide union/intersect implementations to abstract
 -- away Set type. Need benchmarks to work with first.
-type Result = Set.Set Identifier
+type Result = S.HashSet Identifier
 
-data State = State { _clusters :: Map.Map Identifier Cluster } deriving (Show)
+data State = State { _clusters :: M.HashMap Identifier Cluster } deriving (Show)
 makeLenses ''State
 
 type Eval a = ReaderT State Identity a
@@ -44,43 +50,39 @@ type Eval a = ReaderT State Identity a
 runEval :: State -> Eval a -> a
 runEval state e = runIdentity (runReaderT e state)
 
--- http://stackoverflow.com/questions/13730439/mapm-for-data-set-in-haskell
-mapMSet f s = Set.fromList <$> mapM f (Set.toList s)
-
 eval :: Expression -> Eval Result
-eval (Const id)         = return $ Set.singleton id
-eval (Union a b)        = Set.union        <$> eval a <*> eval b
-eval (Intersection a b) = Set.intersection <$> eval a <*> eval b
-eval (Difference a b)   = Set.difference   <$> eval a <*> eval b
+eval (Const id)         = return $ S.singleton id
+eval (Union a b)        = S.union        <$> eval a <*> eval b
+eval (Intersection a b) = S.intersection <$> eval a <*> eval b
+eval (Difference a b)   = S.difference   <$> eval a <*> eval b
 eval (ClusterLookup names keys) = do
   state   <- ask
   nameSet <- eval names
   keySet  <- eval keys
 
-  results <- mapMSet eval $
+  results <- mapM eval . S.toList $
     foldMap (\name ->
       foldMap (clusterLookupKey state name) keySet) nameSet
 
-  -- TODO: folding set union maybe not particularly efficient here, N+M on each
-  -- fold?
-  return $ foldr Set.union Set.empty results
-eval _ = return $ Set.empty
+  -- TODO: folding set union maybe not particularly efficient here?
+  return $ foldr S.union S.empty results
+eval _ = return $ S.empty
 
-clusterLookupKey :: State -> Identifier -> Identifier -> Set.Set Expression
+clusterLookupKey :: State -> Identifier -> Identifier -> S.HashSet Expression
 clusterLookupKey state name "KEYS" =
-  Set.fromList $ map Const $ Map.keys $ state
+  S.fromList $ map Const $ M.keys $ state
     ^. clusters
-    ^. at name . non Map.empty
+    ^. at name . non M.empty
 
 clusterLookupKey state name key =
   state
     ^. clusters
-    ^. at name . non Map.empty
-    ^. at key . non Set.empty
+    ^. at name . non M.empty
+    ^. at key . non S.empty
 
-emptyState = State { _clusters = Map.empty }
+emptyState = State { _clusters = M.empty }
 
 addCluster :: Identifier -> Cluster -> State -> State
-addCluster name cluster = clusters %~ Map.insert name cluster
+addCluster name cluster = clusters %~ M.insert name cluster
 
 fromMap x = State { _clusters = x }

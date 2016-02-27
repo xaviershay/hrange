@@ -5,13 +5,13 @@ module Main where
 import Lib
 import Parser
 import qualified Data.Text as T
-import qualified Data.Map as Map
-import qualified Data.Set as Set
+import qualified Data.HashMap.Strict as M
+import qualified Data.HashSet as S
 
 state =
-  addCluster "again" (Map.singleton "CLUSTER" (Set.fromList [Const "c"])) $
-  addCluster "hello" (Map.singleton "CLUSTER" (Set.fromList [Const "a", ClusterLookup (Const "again") (Const "CLUSTER")])) $
-  addCluster "blah" (Map.singleton "ALL" (Set.fromList [Const "x"])) $
+  addCluster "again" (M.singleton "CLUSTER" (S.fromList [Const "c"])) $
+  addCluster "hello" (M.singleton "CLUSTER" (S.fromList [Const "a", ClusterLookup (Const "again") (Const "CLUSTER")])) $
+  addCluster "blah" (M.singleton "ALL" (S.fromList [Const "x"])) $
   emptyState
 
 main :: IO ()

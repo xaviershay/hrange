@@ -13,9 +13,8 @@ import Text.Parsec
 import Text.Show.Pretty
 
 import System.FilePath (takeDirectory, takeBaseName)
-import qualified Data.Map as M
-import qualified Data.HashMap.Strict as HM
-import qualified Data.Set as S
+import qualified Data.HashMap.Strict as M
+import qualified Data.HashSet as S
 import qualified Data.Vector as V
 import qualified Data.Yaml as Y
 import Data.Scientific (toBoundedInteger, isInteger, Scientific)
@@ -26,12 +25,12 @@ import Parser
 import System.Environment (lookupEnv)
 
 
-type RangeSpec = M.Map String [S.Set String]
+type RangeSpec = M.HashMap String [S.HashSet String]
 
-type RawCluster = M.Map T.Text [T.Text]
+type RawCluster = M.HashMap T.Text [T.Text]
 
 instance Y.FromJSON RawCluster where
-  parseJSON (Y.Object o) = mapM parseKey (M.fromList . HM.toList $ o)
+  parseJSON (Y.Object o) = mapM parseKey o
   parseJSON invalid = fail "YAML top-level object was not an object"
 
 parseKey :: Y.Value -> Y.Parser [T.Text]
@@ -119,7 +118,7 @@ tests specs clusters = testGroup "Range Spec" $ map (rangeSpecs clusters) specs
 rangeSpecs clusters (name, specs) =
   testGroup (takeBaseName name) $ map (specTest state) specs
   where
-    state = fromMap $ M.findWithDefault M.empty (takeDirectory name) clusters
+    state = fromMap $ M.lookupDefault M.empty (takeDirectory name) clusters
 
 specTest state (expr, expected) =
   testCaseSteps ("Evaluating \"" ++ expr ++ "\"") $ \step -> do

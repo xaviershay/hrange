@@ -17,10 +17,11 @@ library
   exposed-modules:     Lib,Parser
   build-depends:       base >= 4.7 && < 5
                      , text
-                     , containers
                      , lens
                      , mtl
                      , parsec
+                     , unordered-containers
+                     , hashable
   default-language:    Haskell2010
 
 executable hrange-exe
@@ -30,8 +31,8 @@ executable hrange-exe
   build-depends:       base
                      , hrange
                      , text
-                     , containers
-                     , hashmap
+                     , unordered-containers
+                     , hashable
   default-language:    Haskell2010
 
 test-suite hrange-test
@@ -45,8 +46,8 @@ test-suite hrange-test
                      , tasty-quickcheck
                      , filemanip
                      , parsec
-                     , containers
                      , unordered-containers
+                     , hashable
                      , pretty-show
                      , yaml
                      , vector
@@ -58,4 +59,4 @@ test-suite hrange-test
 
 source-repository head
   type:     git
-  location: https://github.com/githubuser/hrange
+  location: https://github.com/xaviershay/hrange
