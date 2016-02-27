@@ -1,3 +1,6 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 import Test.Tasty
 import Test.Tasty.HUnit
 import System.FilePath.Find
@@ -9,7 +12,9 @@ import qualified Data.Text as T
 import Text.Parsec
 import Text.Show.Pretty
 
+import System.FilePath (takeDirectory, takeBaseName)
 import qualified Data.Map as M
+import qualified Data.HashMap.Strict as HM
 import qualified Data.Set as S
 import qualified Data.Vector as V
 
@@ -21,7 +26,21 @@ import Parser
 import System.Environment (lookupEnv)
 
 type RangeSpec = M.Map String [S.Set String]
-type RawCluster = M.Map T.Text Y.Value
+
+type RawCluster = M.Map T.Text [T.Text]
+
+instance Y.FromJSON RawCluster where
+  parseJSON (Y.Object o) = mapM parseKey (M.fromList . HM.toList $ o)
+  parseJSON invalid = fail "YAML top-level object was not an object"
+
+parseKey :: Y.Value -> Y.Parser [T.Text]
+parseKey (Y.String x) = return [x]
+parseKey (Y.Number x) = return [T.pack . show $ x]
+parseKey (Y.Bool x)   = return [T.pack . show $ x]
+parseKey (Y.Null)     = return []
+parseKey (Y.Object _) = fail "Nested objects not allowed"
+parseKey (Y.Array xs) = concat <$> mapM parseKey (V.toList xs)
+
 
 -- TODO: Error on spec parse failure
 -- TODO: Warn when RANGE_SPEC_PATH not set
@@ -33,23 +52,20 @@ main = do
 
   -- TODO: Load YAML files also
   contents <- mapM readFile specs
-  clusters <- mapM (\x -> Y.decodeFile x :: IO (Maybe RawCluster)) yamls
+  clusters <- mapM Y.decodeFile yamls
+  -- TODO: Error on bad clusters
   let parsedClusters = zip yamls (map parseCluster clusters)
 
-  putStrLn $ ppShow parsedClusters
+  let parsedClusters' = (M.fromListWith M.union (map (\(k, v) -> (takeDirectory k, M.singleton (T.pack . takeBaseName $ k) (fromRight v))) parsedClusters))
+
+  let parsedSpecs = rights (zipWith (curry parseSpec) specs contents)
+  --putStrLn $ ppShow parsedSpecs
   -- TODO: include keys in specs, map keys to directory, merge specs + clusters
   -- into single data structure.
 
-  --defaultMain (tests $ rights (zipWith (curry parseSpec) specs contents))
+  defaultMain (tests parsedSpecs parsedClusters')
 
-normalizeYaml :: Y.Value -> [String]
-normalizeYaml (Y.Array xs) = map yamlToString $ V.toList xs
-normalizeYaml x = [yamlToString x]
-
--- TODO: Error handling
-yamlToString :: Y.Value -> String
-yamlToString (Y.String x) = show x
-yamlToString (Y.Number x) = show x
+fromRight (Right x) = x
 
 parseCluster :: Maybe RawCluster -> Either String Cluster
 parseCluster Nothing = Left "Could not read or parse as YAML"
@@ -60,7 +76,7 @@ parseCluster (Just xs) = if null errors then
 
   where
     errors = concatMap lefts $ M.elems parsedMap
-    parsedMap = M.map (\x -> map parseRange (normalizeYaml x)) xs
+    parsedMap = M.map (\x -> map (parseRange . show) x) xs
 
 eol = char '\n'
 
@@ -92,18 +108,21 @@ parseSpec (name, input) = f p
     f (Right parse) = Right (name, parse)
     f (Left err)    = Left err
 
-tests specs = testGroup "Range Spec" $ map rangeSpecs specs
+tests specs clusters = testGroup "Range Spec" $ map (rangeSpecs clusters) specs
 
-rangeSpecs (name, specs) = testGroup name $ map specTest specs
+rangeSpecs clusters (name, specs) =
+  testGroup (takeBaseName name) $ map (specTest state) specs
+  where
+    state = fromMap $ M.findWithDefault M.empty (takeDirectory name) clusters
 
-specTest (expr, expected) =
+specTest state (expr, expected) =
   testCaseSteps ("Evaluating \"" ++ expr ++ "\"") $ \step -> do
     step "Parsing"
     assert $ isRight actual
 
     step "Evaluating"
-    expected @=? results 
+    expected @=? results
   where
     actual = parseRange expr
     fromRight (Right r) = r
-    results = runEval emptyState $ eval (fromRight actual)
+    results = runEval state $ eval (fromRight actual)

@@ -36,7 +36,7 @@ type Cluster = Map.Map Identifier (Set.Set Expression)
 -- away Set type. Need benchmarks to work with first.
 type Result = Set.Set Identifier
 
-data State = State { _clusters :: Map.Map Identifier Cluster }
+data State = State { _clusters :: Map.Map Identifier Cluster } deriving (Show)
 makeLenses ''State
 
 type Eval a = ReaderT State Identity a
@@ -74,3 +74,5 @@ emptyState = State { _clusters = Map.empty }
 
 addCluster :: Identifier -> Cluster -> State -> State
 addCluster name cluster = clusters %~ Map.insert name cluster
+
+fromMap x = State { _clusters = x }
