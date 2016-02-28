@@ -95,16 +95,22 @@ product excludes = do
     else
       Product exprs
 
-numericRange = mkRange <$> many letter <*> many1 digit <* string ".." <*> many letter <*> many1 digit
-  where
-    fromConst (Const x) = x
-    mkRange prefix lower prefix2 upper =
-      let commonPrefix = commonSuffix [prefix, prefix2] in
+numericRange = do
+  prefix  <- many letter
+  lower   <- many1 digit
+  _       <- string ".."
+  prefix2 <- many letter
+  upper   <- many1 digit
 
-      -- TODO: Ensure len lower <= len upper by rebalancing into prefix. Then cast
-      -- to int.
-      NumericRange (T.pack commonPrefix) (T.pack lower) (T.pack upper)
-
+  let commonPrefix = commonSuffix [prefix, prefix2]
+  if commonPrefix == prefix2 then
+    let diff    = length lower - length upper in
+    let prefix' = prefix ++ (take diff lower) in
+    let lower'  = drop diff lower in
+    -- TODO: Quickcheck to verify read here is safe
+    return $ NumericRange (T.pack prefix') (length lower') (read lower') (read upper)
+  else
+    fail "Second prefix in range must be common to first prefix"
 
 -- TODO: quick check and stuff
 commonSuffix :: [String] -> String

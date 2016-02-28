@@ -18,6 +18,9 @@ import           "mtl" Control.Monad.Identity
 import           "mtl" Control.Monad.Reader
 import Data.Foldable
 import Data.Hashable
+import Data.Monoid ((<>))
+
+import Text.Printf (printf)
 
 import GHC.Generics
 
@@ -30,7 +33,7 @@ data Expression =
   Regexp Identifier | -- TODO: Native regex type
   Function Identifier [Expression] |
   Product [Expression] |
-  NumericRange Identifier Identifier Identifier |
+  NumericRange Identifier Int Integer Integer |
   Const Identifier
 
   deriving (Eq, Show, Generic)
@@ -118,6 +121,12 @@ eval (ClusterLookup names keys) = do
 
   -- TODO: folding set union maybe not particularly efficient here?
   return $ foldr S.union S.empty results
+
+eval (NumericRange prefix width low high) = do
+  let nums = map (T.pack . printf ("%0" ++ show width ++ "i")) $ [low,low+1..high] :: [Identifier]
+
+  return . S.fromList $ map ((<>) prefix) nums
+
 eval _ = return S.empty
 
 clusterLookupKey :: State -> Identifier -> Identifier -> S.HashSet Expression
