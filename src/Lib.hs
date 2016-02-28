@@ -67,6 +67,9 @@ eval (Function "allclusters" _) = do
   return . S.fromList . M.keys $ state ^. clusters
 
 -- TODO: Type checking for number of args
+eval (Function "clusters" names) = eval $ Function "has" (Const "CLUSTER":names)
+
+-- TODO: Type checking for number of args
 eval (Function "has" (keys:names:_)) = do
   state <- ask
   nameSet <- eval names
