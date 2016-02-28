@@ -16,6 +16,8 @@ import Control.Monad (guard)
 import Text.Parsec hiding (many, optional, (<|>))
 import Text.Parsec.Expr
 
+import qualified Text.Regex.TDFA as R
+
 parseRange :: Maybe Expression -> String -> Either ParseError Expression
 parseRange localCluster input = runParser rangeExpr localCluster input input
 
@@ -90,7 +92,8 @@ clustersFunction = mkClusters <$> (char '*' *> innerExpr)
 
 -- TODO: Allow escaping?
 -- TODO: Actual regex rather than packing to identifier
-regex = Regexp . T.pack <$> (char '/' *> many (noneOf "/") <* char '/')
+-- TODO: Can makeRegex fail?
+regex = makeShowableRegex <$> (char '/' *> many (noneOf "/") <* char '/')
 constantQ      = Const . T.pack <$> (string "q(" *> many (noneOf ")") <* char ')')
 constantQuotes = Const . T.pack <$> (string "\"" *> many (noneOf "\"") <* char '"')
 

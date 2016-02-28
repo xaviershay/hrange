@@ -21,22 +21,39 @@ import Data.Hashable
 import Data.Monoid ((<>))
 
 import Text.Printf (printf)
+import Text.Regex.TDFA as R
 
 import GHC.Generics
 
 type Identifier = T.Text
+
+-- Regex doesn't implement Show, Eq, etc which is pretty annoying
+data ShowableRegex = ShowableRegex String R.Regex
+
+instance Hashable ShowableRegex where
+  hashWithSalt salt (ShowableRegex x _) = hashWithSalt salt x
+
+instance Show ShowableRegex where
+  show (ShowableRegex x _) = "/" ++ x ++ "/"
+
+instance Eq ShowableRegex where
+  (ShowableRegex x _) == (ShowableRegex y _) = x == y
+
+makeShowableRegex x = Regexp $ ShowableRegex x (makeRegex x :: R.Regex)
+
 data Expression =
   Intersection Expression Expression |
   Difference Expression Expression |
   Union Expression Expression |
   ClusterLookup Expression Expression |
-  Regexp Identifier | -- TODO: Native regex type
+  Regexp ShowableRegex |
   Function Identifier [Expression] |
   Product [Expression] |
   NumericRange Identifier Int Integer Integer |
   Const Identifier
 
   deriving (Eq, Show, Generic)
+
 
 instance Hashable Expression
 
@@ -61,7 +78,20 @@ mapFilterM p clusters = do
 eval :: Expression -> Eval Result
 eval (Const id)         = return $ S.singleton id
 eval (Union a b)        = S.union        <$> eval a <*> eval b
+
+-- TODO: Fail parse if two regexps
+eval (Intersection (Regexp lhs) rhs) = eval (Intersection rhs (Regexp lhs))
+eval (Intersection a (Regexp (ShowableRegex _ rx))) = do
+  lhs <- eval a
+  return $ S.filter (R.matchTest rx . T.unpack) lhs
+
 eval (Intersection a b) = S.intersection <$> eval a <*> eval b
+
+-- TODO: Fail parse if diff on LHS
+eval (Difference a (Regexp (ShowableRegex _ rx))) = do
+  lhs <- eval a
+  return $ S.filter (not . R.matchTest rx . T.unpack) lhs
+
 eval (Difference a b)   = S.difference   <$> eval a <*> eval b
 
 -- TODO: Type checking for number of args
