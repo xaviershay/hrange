@@ -60,6 +60,12 @@ eval (Const id)         = return $ S.singleton id
 eval (Union a b)        = S.union        <$> eval a <*> eval b
 eval (Intersection a b) = S.intersection <$> eval a <*> eval b
 eval (Difference a b)   = S.difference   <$> eval a <*> eval b
+
+-- TODO: Type checking for number of args
+eval (Function "allclusters" _) = do
+  state <- ask
+  return . S.fromList . M.keys $ state ^. clusters
+
 -- TODO: Type checking for number of args
 eval (Function "has" (keys:names:_)) = do
   state <- ask
