@@ -2,6 +2,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE PackageImports #-} -- TODO: Understand what this doe
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Lib
     ( module Lib
@@ -39,7 +40,10 @@ instance Show ShowableRegex where
 instance Eq ShowableRegex where
   (ShowableRegex x _) == (ShowableRegex y _) = x == y
 
-makeShowableRegex x = Regexp $ ShowableRegex x (makeRegex x :: R.Regex)
+makeShowableRegex x = do
+  rx <- makeRegexM x
+
+  return . Regexp $ ShowableRegex x (rx :: R.Regex)
 
 data Expression =
   Intersection Expression Expression |
@@ -47,7 +51,9 @@ data Expression =
   Union Expression Expression |
   ClusterLookup Expression Expression |
   Regexp ShowableRegex |
-  Function Identifier [Expression] |
+  FunctionHas Expression Expression |
+  FunctionClusters Expression |
+  FunctionAllClusters |
   Product [Expression] |
   NumericRange Identifier Int Integer Integer |
   Const Identifier
@@ -80,6 +86,7 @@ eval (Const id)         = return $ S.singleton id
 eval (Union a b)        = S.union        <$> eval a <*> eval b
 
 -- TODO: Fail parse if two regexps
+eval (Intersection (Regexp lhs) (Regexp rhs)) = error "Invalid, should be prevented by parse"
 eval (Intersection (Regexp lhs) rhs) = eval (Intersection rhs (Regexp lhs))
 eval (Intersection a (Regexp (ShowableRegex _ rx))) = do
   lhs <- eval a
@@ -95,15 +102,15 @@ eval (Difference a (Regexp (ShowableRegex _ rx))) = do
 eval (Difference a b)   = S.difference   <$> eval a <*> eval b
 
 -- TODO: Type checking for number of args
-eval (Function "allclusters" _) = do
+eval FunctionAllClusters = do
   state <- ask
   return . S.fromList . M.keys $ state ^. clusters
 
 -- TODO: Type checking for number of args
-eval (Function "clusters" names) = eval $ Function "has" (Const "CLUSTER":names)
+eval (FunctionClusters names) = eval $ FunctionHas (Const "CLUSTER") names
 
 -- TODO: Type checking for number of args
-eval (Function "has" (keys:names:_)) = do
+eval (FunctionHas keys names) = do
   state <- ask
   nameSet <- eval names
   keySet  <- eval keys
@@ -115,11 +122,11 @@ eval (Function "has" (keys:names:_)) = do
   where
     hasNamesInKeys names keys cluster = do
       hasAny <- mapM (hasNameInKeys cluster keys) $ S.toList names
-      return $ any id hasAny
+      return $ or hasAny
 
     hasNameInKeys cluster keys name = do
       hasName <- mapM (hasNameInKey cluster name) $ S.toList keys
-      return $ any id hasName
+      return $ or hasName
 
     hasNameInKey cluster name key = do
       names <- namesAtKey cluster key
@@ -153,11 +160,9 @@ eval (ClusterLookup names keys) = do
   return $ foldr S.union S.empty results
 
 eval (NumericRange prefix width low high) = do
-  let nums = map (T.pack . printf ("%0" ++ show width ++ "i")) $ [low,low+1..high] :: [Identifier]
+  let nums = map (T.pack . printf ("%0" ++ show width ++ "i")) [low..high] :: [Identifier]
 
-  return . S.fromList $ map ((<>) prefix) nums
-
-eval _ = return S.empty
+  return . S.fromList $ map (prefix <>) nums
 
 clusterLookupKey :: State -> Identifier -> Identifier -> S.HashSet Expression
 clusterLookupKey state name "KEYS" =

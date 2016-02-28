@@ -3,7 +3,10 @@
 
 import Test.Tasty
 import Test.Tasty.HUnit
+import Test.Tasty.QuickCheck as QC
 import System.FilePath.Find
+
+import Debug.Trace
 
 import Data.Maybe
 import Data.Either
@@ -11,6 +14,7 @@ import Data.Either
 import qualified Data.Text as T
 import Text.Parsec
 import Text.Show.Pretty
+import qualified Text.Regex.TDFA as R
 
 import System.FilePath (takeDirectory, takeBaseName)
 import qualified Data.HashMap.Strict as M
@@ -19,6 +23,7 @@ import qualified Data.Vector as V
 import qualified Data.Yaml as Y
 import Data.Scientific (toBoundedInteger, isInteger, Scientific)
 
+import Control.Monad (replicateM)
 import Lib
 import Parser
 
@@ -119,7 +124,46 @@ parseSpec (name, input) = f p
     f (Right parse) = Right (name, parse)
     f (Left err)    = Left err
 
-tests specs clusters = testGroup "Range Spec" $ map (rangeSpecs clusters) specs
+tests specs clusters = testGroup ""
+  [ testGroup "Range Spec" $ map (rangeSpecs clusters) specs
+  , testGroup "Quickchecks" quickchecks
+  ]
+
+instance Arbitrary Expression where
+  arbitrary = frequency
+    [ (2, Const <$> printable)
+    , (1, oneof
+            [ (Intersection  <$> arbitraryIncRegex <*> arbitraryIncRegex) `suchThat` notBothRegexes
+            , Union         <$> arbitrary <*> arbitrary
+            , Difference    <$> arbitrary <*> arbitraryIncRegex
+            , ClusterLookup <$> arbitrary <*> arbitrary
+            , FunctionHas   <$> arbitrary <*> arbitrary
+            , FunctionClusters <$> arbitrary
+            , pure FunctionAllClusters
+            , Product <$> scale ((`mod` 10) . abs) arbitrary
+            , NumericRange <$> printable <*> elements [0..10] <*> smallInt <*> smallInt
+            ])
+    ]
+
+smallInt = elements [0..10]
+
+arbitraryIncRegex = oneof
+  [ arbitrary
+  , fromJust . makeShowableRegex <$> scale ((`mod` 10) . abs) (listOf1 $ elements ['a'..'z'])
+  ]
+
+notBothRegexes (Intersection (Regexp _) (Regexp _)) = False
+notBothRegexes _ = True
+
+--instance Arbitrary ShowableRegex where
+--  arbitrary = makeShowableRegex <$> arbitrary
+
+printable = T.pack <$> listOf1 (elements ['a'..'z'])
+
+quickchecks =
+  [ QC.testProperty "eval is fully defined" $
+      \expr -> runEval emptyState (eval expr) `seq` True
+  ]
 
 rangeSpecs clusters (name, specs) =
   testGroup (takeBaseName name) $ map (specTest state) specs

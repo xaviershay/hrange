@@ -15,6 +15,7 @@ import Control.Monad (guard)
 -- Hide a few names that are provided by Applicative.
 import Text.Parsec hiding (many, optional, (<|>))
 import Text.Parsec.Expr
+import Text.Printf (printf)
 
 import qualified Text.Regex.TDFA as R
 
@@ -77,23 +78,38 @@ localClusterLookup = do
 
 keys = char ':' *> innerExpr
 
-function = mkFunction <$>
-  try (many1 alphaNum) <* char '(' <*>
-  outerExpr `sepBy` char ';' <* char ')'
+function = do
+  name <- (many1 alphaNum) <* char '('
+  exprs <- outerExpr `sepBy` char ';' <* char ')'
+
+  mkFunction name exprs
 
   where
-    mkFunction n = Function (T.pack n)
+    mkFunction "has" exprs = defineFunction "has" 2 (\xs -> FunctionHas (xs !! 0) (xs !! 1)) exprs
+    mkFunction "clusters" exprs = defineFunction "clusters" 1 (\xs -> FunctionClusters (head xs)) exprs
+    mkFunction "allclusters" exprs = defineFunction "allclusters" 0 (\_ -> FunctionAllClusters) exprs
+    mkFunction name _ = fail $ printf "Unknown function: %s" (name :: String)
+
+    defineFunction name expected f exprs =
+      if length exprs == expected then
+        return $ f exprs
+      else
+        fail $ printf "%s() expects %i arguments, got %i" (name :: String) expected (length exprs)
 
 clustersFunction = mkClusters <$> (char '*' *> innerExpr)
   where
-    mkClusters expr = Function (T.pack "clusters") [expr]
+    mkClusters expr = FunctionClusters expr
 
 -- IDENTIFIERS
 
 -- TODO: Allow escaping?
--- TODO: Actual regex rather than packing to identifier
--- TODO: Can makeRegex fail?
-regex = makeShowableRegex <$> (char '/' *> many (noneOf "/") <* char '/')
+regex = do
+  source <- char '/' *> many (noneOf "/") <* char '/'
+
+  case makeShowableRegex source of
+    Just rx -> return rx
+    Nothing -> fail ("Invalid regex: " ++ source)
+
 constantQ      = Const . T.pack <$> (string "q(" *> many (noneOf ")") <* char ')')
 constantQuotes = Const . T.pack <$> (string "\"" *> many (noneOf "\"") <* char '"')
 
