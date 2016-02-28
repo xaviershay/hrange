@@ -57,9 +57,10 @@ main = do
 
   -- TODO: Load YAML files also
   contents <- mapM readFile specs
-  clusters <- mapM Y.decodeFile yamls
+  clusters <- mapM decodeFileWithPath yamls
   -- TODO: Error on bad clusters
-  let parsedClusters = zip yamls (map parseCluster clusters)
+  -- TODO: This is a mess
+  let parsedClusters = map (\(fp, c) -> (fp, parseCluster (fp, c))) clusters
 
   let parsedClusters' = M.fromListWith M.union (map (\(k, v) -> (takeDirectory k, M.singleton (T.pack . takeBaseName $ k) (fromRight v))) parsedClusters)
 
@@ -70,18 +71,23 @@ main = do
 
   defaultMain (tests parsedSpecs parsedClusters')
 
+decodeFileWithPath path = do
+    content <- Y.decodeFile path
+    return (path, content)
+
 fromRight (Right x) = x
 
-parseCluster :: Maybe RawCluster -> Either String Cluster
-parseCluster Nothing = Left "Could not read or parse as YAML"
-parseCluster (Just xs) = if null errors then
-                           Right $ M.map (S.fromList . rights) parsedMap
-                         else
-                           Left . unlines $ map show errors
+parseCluster :: (FilePath, Maybe RawCluster) -> Either String Cluster
+parseCluster (_, Nothing) = Left "Could not read or parse as YAML"
+parseCluster (fp, Just xs) = if null errors then
+                               Right $ M.map (S.fromList . rights) parsedMap
+                             else
+                               Left . unlines $ map show errors
 
   where
     errors = concatMap lefts $ M.elems parsedMap
-    parsedMap = M.map (map $ parseRange . show) xs
+    clusterName = Just . Const . T.pack $ takeBaseName fp
+    parsedMap = M.map (map $ parseRange clusterName . T.unpack) xs
 
 eol = char '\n'
 
@@ -128,6 +134,6 @@ specTest state (expr, expected) =
     step $ "Evaluating " ++ show (fromRight actual)
     expected @=? results
   where
-    actual = parseRange expr
+    actual = parseRange Nothing expr
     fromRight (Right r) = r
     results = runEval state $ eval (fromRight actual)

@@ -8,15 +8,16 @@ import Lib
 
 import qualified Data.Text as T
 import Data.List (transpose)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isJust, fromJust)
 
 import Control.Applicative hiding (Const)
+import Control.Monad (guard)
 -- Hide a few names that are provided by Applicative.
 import Text.Parsec hiding (many, optional, (<|>))
 import Text.Parsec.Expr
 
-parseRange :: String -> Either ParseError Expression
-parseRange input = parse rangeExpr input input
+parseRange :: Maybe Expression -> String -> Either ParseError Expression
+parseRange localCluster input = runParser rangeExpr localCluster input input
 
 rangeExpr = outerExpr <* eof
 
@@ -38,6 +39,7 @@ innerExpr = innerExprWithExcludes ""
 innerExprCluster = innerExprWithExcludes ":"
 innerExprWithExcludes excludes =
   (   clusterLookup
+  <|> localClusterLookup
   <|> clustersFunction
   <|> try parentheses
   <|> regex
@@ -61,6 +63,15 @@ clusterLookup = do
   keys  <- optionMaybe keys
 
   return $ ClusterLookup names (fromMaybe (Const "CLUSTER") keys)
+
+localClusterLookup = do
+  name <- getState
+  guard $ isJust name
+
+  first <- char '$'
+  keys  <- innerExprCluster
+
+  return $ ClusterLookup (fromJust name) keys
 
 keys = char ':' *> innerExpr
 

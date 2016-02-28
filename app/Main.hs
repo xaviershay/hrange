@@ -17,7 +17,7 @@ state =
 main :: IO ()
 --main = print $ runEval $ eval state (Difference (GroupLookup (Const "hello") (Const "CLUSTER")) (Const "a"))
 main = do
-  print $ parseRange "/a/"
+  print $ parseRange Nothing "/a/"
   --print $ parseRange "%hello & there"
   --print $ parseRange "%hello"
   --print $ parseRange "%hello:KEYS"
