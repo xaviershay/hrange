@@ -41,8 +41,8 @@ type Cluster = M.HashMap Identifier (S.HashSet Expression)
 -- TODO: newtype this and provide union/intersect implementations to abstract
 -- away Set type. Need benchmarks to work with first.
 type Result = S.HashSet Identifier
-
-data State = State { _clusters :: M.HashMap Identifier Cluster } deriving (Show)
+type ClusterMap = M.HashMap Identifier Cluster
+data State = State { _clusters :: ClusterMap } deriving (Show)
 makeLenses ''State
 
 type Eval a = ReaderT State Identity a
@@ -50,11 +50,46 @@ type Eval a = ReaderT State Identity a
 runEval :: State -> Eval a -> a
 runEval state e = runIdentity (runReaderT e state)
 
+mapFilterM :: (Monad m) => (Cluster -> m Bool) -> ClusterMap -> m ClusterMap
+mapFilterM p clusters = do
+  matching <- filterM (p . snd) (M.toList clusters)
+  return $ M.fromList matching
+
 eval :: Expression -> Eval Result
 eval (Const id)         = return $ S.singleton id
 eval (Union a b)        = S.union        <$> eval a <*> eval b
 eval (Intersection a b) = S.intersection <$> eval a <*> eval b
 eval (Difference a b)   = S.difference   <$> eval a <*> eval b
+-- TODO: Type checking for number of args
+eval (Function "has" (keys:names:_)) = do
+  state <- ask
+  nameSet <- eval names
+  keySet  <- eval keys
+
+  matching <- mapFilterM (hasNamesInKeys nameSet keySet) (state ^. clusters)
+
+  return . S.fromList . M.keys $ matching
+
+  where
+    hasNamesInKeys names keys cluster = do
+      hasAny <- mapM (hasNameInKeys cluster keys) $ S.toList names
+      return $ any id hasAny
+
+    hasNameInKeys cluster keys name = do
+      hasName <- mapM (hasNameInKey cluster name) $ S.toList keys
+      return $ any id hasName
+
+    hasNameInKey cluster name key = do
+      names <- namesAtKey cluster key
+      return $ S.member name names
+
+    namesAtKey cluster key = do
+      names <- mapM eval . S.toList $ exprsAtKey cluster key
+      return $ foldr S.union S.empty names
+
+    exprsAtKey :: Cluster -> Identifier -> S.HashSet Expression
+    exprsAtKey cluster key = cluster ^. at key . non S.empty
+
 eval (Product xs) = do
   results <- mapM eval xs
 
