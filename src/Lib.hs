@@ -28,6 +28,14 @@ import GHC.Generics
 
 type Identifier = T.Text
 
+-- Not sure how I feel about this one yet, but first step in teasing apart
+-- different uses of Identifier.
+newtype ClusterKey = ClusterKey T.Text deriving (Show, Eq, Generic)
+instance Hashable ClusterKey
+
+toConst (ClusterKey k) = Const k
+asClusterKeys = map ClusterKey . S.toList
+
 -- Regex doesn't implement Show, Eq, etc which is pretty annoying
 data ShowableRegex = ShowableRegex String R.Regex
 
@@ -66,7 +74,7 @@ instance Hashable Expression
 -- Cluster expressions should be unique (i.e. a set), but that doesn't really
 -- buy us anything implementation wise. It's easier (and strictly more accurate
 -- to the source data) to store as a list.
-type Cluster = M.HashMap Identifier [Expression]
+type Cluster = M.HashMap ClusterKey [Expression]
 
 -- TODO: newtype this and provide union/intersect implementations to abstract
 -- away Set type. Need benchmarks to work with first.
@@ -129,7 +137,7 @@ eval (FunctionHas keys names) = do
       return $ or hasAny
 
     hasNameInKeys cluster keys name = do
-      hasName <- mapM (hasNameInKey cluster name) $ S.toList keys
+      hasName <- mapM (hasNameInKey cluster name) $ asClusterKeys keys
       return $ or hasName
 
     hasNameInKey cluster name key = do
@@ -140,7 +148,7 @@ eval (FunctionHas keys names) = do
       names <- mapM eval (exprsAtKey cluster key)
       return $ foldr S.union S.empty names
 
-    exprsAtKey :: Cluster -> Identifier -> [Expression]
+    exprsAtKey :: Cluster -> ClusterKey -> [Expression]
     exprsAtKey cluster key = cluster ^. at key . non []
 
 eval (Product xs) = do
@@ -158,7 +166,7 @@ eval (ClusterLookup names keys) = do
 
   results <- mapM eval $
     foldMap (\name ->
-      foldMap (clusterLookupKey state name) keySet) nameSet
+      foldMap (clusterLookupKey state name) (asClusterKeys keySet)) nameSet
 
   -- TODO: folding set union maybe not particularly efficient here?
   return $ foldr S.union S.empty results
@@ -178,9 +186,9 @@ eval (NumericRange prefix width low high) = do
 -- type system.
 eval (Regexp _) = return S.empty
 
-clusterLookupKey :: State -> Identifier -> Identifier -> [Expression]
-clusterLookupKey state name "KEYS" =
-  map Const $ M.keys $ state
+clusterLookupKey :: State -> Identifier -> ClusterKey -> [Expression]
+clusterLookupKey state name (ClusterKey "KEYS") =
+  map toConst $ M.keys $ state
     ^. clusters
     ^. at name . non M.empty
 

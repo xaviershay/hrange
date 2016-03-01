@@ -32,19 +32,26 @@ import System.Environment (lookupEnv)
 
 type RangeSpec = M.HashMap String [S.HashSet String]
 
-type RawCluster = M.HashMap T.Text [T.Text]
+type RawCluster = M.HashMap ClusterKey [T.Text]
 
 instance Y.FromJSON RawCluster where
-  parseJSON (Y.Object o) = mapM parseKey o
+  parseJSON (Y.Object o) = do
+    cluster <- mapM parseKey (M.toList o)
+    return . M.fromList $ cluster
+
   parseJSON invalid = fail "YAML top-level object was not an object"
 
-parseKey :: Y.Value -> Y.Parser [T.Text]
-parseKey (Y.String x) = return [x]
-parseKey (Y.Number x) = return [T.pack . formatScientific $ x]
-parseKey (Y.Bool x)   = return [T.pack . show $ x]
-parseKey (Y.Object _) = fail "Nested objects not allowed"
-parseKey (Y.Array xs) = concat <$> mapM parseKey (V.toList xs)
-parseKey Y.Null       = return []
+parseKey (x, exprs) = do
+  parsed <- parseExprs exprs
+  return $ (ClusterKey x, parsed)
+
+parseExprs :: Y.Value -> Y.Parser [T.Text]
+parseExprs (Y.String x) = return [x]
+parseExprs (Y.Number x) = return [T.pack . formatScientific $ x]
+parseExprs (Y.Bool x)   = return [T.pack . show $ x]
+parseExprs (Y.Object _) = fail "Nested objects not allowed"
+parseExprs (Y.Array xs) = concat <$> mapM parseExprs (V.toList xs)
+parseExprs Y.Null       = return []
 
 formatScientific :: Scientific -> String
 formatScientific x = if isInteger x then
