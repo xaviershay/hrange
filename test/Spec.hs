@@ -74,7 +74,7 @@ main = do
   -- TODO: This is a mess
   let parsedClusters = map (\(fp, c) -> (fp, parseCluster (fp, c))) clusters
 
-  let parsedClusters' = M.fromListWith M.union (map (\(k, v) -> (takeDirectory k, M.singleton (T.pack . takeBaseName $ k) (fromRight v))) parsedClusters)
+  let parsedClusters' = M.fromListWith M.union (map (\(k, v) -> (takeDirectory k, M.singleton (Identifier . T.pack . takeBaseName $ k) (fromRight v))) parsedClusters)
 
   let parsedSpecs = rights (zipWith (curry parseSpec) specs contents)
   --putStrLn $ ppShow parsedSpecs
@@ -98,7 +98,7 @@ parseCluster (fp, Just xs) = if null errors then
 
   where
     errors = concatMap lefts $ M.elems parsedMap
-    clusterName = Just . Const . T.pack $ takeBaseName fp
+    clusterName = Just . mkConst $ takeBaseName fp
     parsedMap = M.map (map $ parseRange clusterName . T.unpack) xs
 
 eol = char '\n'
@@ -120,7 +120,7 @@ rangeSingleSpec = do
   spec <- many (comment <|> line)
   _    <- optionMaybe eol
 
-  return (fromJust expr, S.fromList . map T.pack . catMaybes $ spec)
+  return (fromJust expr, S.fromList . map (Identifier . T.pack) . catMaybes $ spec)
 
 rangeSpec = many rangeSingleSpec
 
@@ -138,7 +138,7 @@ tests specs clusters = testGroup ""
 
 instance Arbitrary Expression where
   arbitrary = frequency
-    [ (1, Const <$> printable)
+    [ (1, Const <$> (Identifier <$> printable))
     , (1, oneof
             [ Intersection  <$> arbitrary <*> arbitrary
             , Union         <$> arbitrary <*> arbitrary
@@ -149,7 +149,7 @@ instance Arbitrary Expression where
             , fromJust . makeShowableRegex <$> scale ((`mod` 10) . abs) (listOf1 $ elements ['a'..'z'])
             , pure FunctionAllClusters
             , Product <$> scale ((`mod` 10) . abs) arbitrary
-            , NumericRange <$> printable <*> elements [0..10] <*> smallInt <*> smallInt
+            , NumericRange <$> (Identifier <$> printable) <*> elements [0..10] <*> smallInt <*> smallInt
             ])
     ]
 

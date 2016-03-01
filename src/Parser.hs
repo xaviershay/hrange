@@ -65,7 +65,7 @@ clusterLookup = do
   names <- innerExprCluster
   keys  <- optionMaybe keys
 
-  return $ ClusterLookup names (fromMaybe (Const "CLUSTER") keys)
+  return $ ClusterLookup names (fromMaybe (mkConst "CLUSTER") keys)
 
 localClusterLookup = do
   name <- getState
@@ -110,8 +110,8 @@ regex = do
     Just rx -> return rx
     Nothing -> fail ("Invalid regex: " ++ source)
 
-constantQ      = Const . T.pack <$> (string "q(" *> many (noneOf ")") <* char ')')
-constantQuotes = Const . T.pack <$> (string "\"" *> many (noneOf "\"") <* char '"')
+constantQ      = mkConst <$> (string "q(" *> many (noneOf ")") <* char ')')
+constantQuotes = mkConst <$> (string "\"" *> many (noneOf "\"") <* char '"')
 
 product excludes = do
   exprs <- many1 (try numericRange <|> try (identifier excludes) <|> productBraces)
@@ -138,7 +138,7 @@ numericRange = do
     let prefix' = prefix ++ (take diff lower) in
     let lower'  = drop diff lower in
     -- TODO: Quickcheck to verify read here is safe
-    return $ NumericRange (T.pack prefix') (length lower') (read lower') (read upper)
+    return $ NumericRange (Identifier . T.pack $ prefix') (length lower') (read lower') (read upper)
   else
     fail "Second prefix in range must be common to first prefix"
 
@@ -154,6 +154,6 @@ stripChars :: String -> String -> String
 stripChars = filter . flip notElem
 
 -- TODO: More chars here maybe
-identifier excludes = Const . T.pack <$> many1 (alphaNum <|> oneOf punctuation)
+identifier excludes = mkConst <$> many1 (alphaNum <|> oneOf punctuation)
   where
     punctuation = stripChars excludes "-_:."
