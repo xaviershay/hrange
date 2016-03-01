@@ -86,7 +86,7 @@ eval (Const id)         = return $ S.singleton id
 eval (Union a b)        = S.union        <$> eval a <*> eval b
 
 -- TODO: Fail parse if two regexps
-eval (Intersection (Regexp lhs) (Regexp rhs)) = error "Invalid, should be prevented by parse"
+eval (Intersection (Regexp lhs) (Regexp rhs)) = return S.empty
 eval (Intersection (Regexp lhs) rhs) = eval (Intersection rhs (Regexp lhs))
 eval (Intersection a (Regexp (ShowableRegex _ rx))) = do
   lhs <- eval a
@@ -163,6 +163,16 @@ eval (NumericRange prefix width low high) = do
   let nums = map (T.pack . printf ("%0" ++ show width ++ "i")) [low..high] :: [Identifier]
 
   return . S.fromList $ map (prefix <>) nums
+
+-- Some implementations return %{allclusters()} matched against the regex. On a
+-- suspicion that this a pattern that should be discouraged, I'm opting here to
+-- return empty and prevent the parser from generating regex expression outside
+-- of an intersection or difference. Those implementations provide special
+-- cased actual behaviour for Regexp without recursing here.
+--
+-- If this turns out to be a good decision, I'll consider encoding it into the
+-- type system.
+eval (Regexp _) = return S.empty
 
 clusterLookupKey :: State -> Identifier -> Identifier -> S.HashSet Expression
 clusterLookupKey state name "KEYS" =

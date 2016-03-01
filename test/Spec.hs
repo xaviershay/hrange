@@ -131,14 +131,15 @@ tests specs clusters = testGroup ""
 
 instance Arbitrary Expression where
   arbitrary = frequency
-    [ (2, Const <$> printable)
+    [ (1, Const <$> printable)
     , (1, oneof
-            [ (Intersection  <$> arbitraryIncRegex <*> arbitraryIncRegex) `suchThat` notBothRegexes
+            [ Intersection  <$> arbitrary <*> arbitrary
             , Union         <$> arbitrary <*> arbitrary
-            , Difference    <$> arbitrary <*> arbitraryIncRegex
+            , Difference    <$> arbitrary <*> arbitrary
             , ClusterLookup <$> arbitrary <*> arbitrary
             , FunctionHas   <$> arbitrary <*> arbitrary
             , FunctionClusters <$> arbitrary
+            , fromJust . makeShowableRegex <$> scale ((`mod` 10) . abs) (listOf1 $ elements ['a'..'z'])
             , pure FunctionAllClusters
             , Product <$> scale ((`mod` 10) . abs) arbitrary
             , NumericRange <$> printable <*> elements [0..10] <*> smallInt <*> smallInt
@@ -146,17 +147,6 @@ instance Arbitrary Expression where
     ]
 
 smallInt = elements [0..10]
-
-arbitraryIncRegex = oneof
-  [ arbitrary
-  , fromJust . makeShowableRegex <$> scale ((`mod` 10) . abs) (listOf1 $ elements ['a'..'z'])
-  ]
-
-notBothRegexes (Intersection (Regexp _) (Regexp _)) = False
-notBothRegexes _ = True
-
---instance Arbitrary ShowableRegex where
---  arbitrary = makeShowableRegex <$> arbitrary
 
 printable = T.pack <$> listOf1 (elements ['a'..'z'])
 
