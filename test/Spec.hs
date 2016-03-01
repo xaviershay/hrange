@@ -85,7 +85,7 @@ fromRight (Right x) = x
 parseCluster :: (FilePath, Maybe RawCluster) -> Either String Cluster
 parseCluster (_, Nothing) = Left "Could not read or parse as YAML"
 parseCluster (fp, Just xs) = if null errors then
-                               Right $ M.map (S.fromList . rights) parsedMap
+                               Right $ M.map rights parsedMap
                              else
                                Left . unlines $ map show errors
 

@@ -63,7 +63,11 @@ data Expression =
 
 instance Hashable Expression
 
-type Cluster = M.HashMap Identifier (S.HashSet Expression)
+-- Cluster expressions should be unique (i.e. a set), but that doesn't really
+-- buy us anything implementation wise. It's easier (and strictly more accurate
+-- to the source data) to store as a list.
+type Cluster = M.HashMap Identifier [Expression]
+
 -- TODO: newtype this and provide union/intersect implementations to abstract
 -- away Set type. Need benchmarks to work with first.
 type Result = S.HashSet Identifier
@@ -133,11 +137,11 @@ eval (FunctionHas keys names) = do
       return $ S.member name names
 
     namesAtKey cluster key = do
-      names <- mapM eval . S.toList $ exprsAtKey cluster key
+      names <- mapM eval (exprsAtKey cluster key)
       return $ foldr S.union S.empty names
 
-    exprsAtKey :: Cluster -> Identifier -> S.HashSet Expression
-    exprsAtKey cluster key = cluster ^. at key . non S.empty
+    exprsAtKey :: Cluster -> Identifier -> [Expression]
+    exprsAtKey cluster key = cluster ^. at key . non []
 
 eval (Product xs) = do
   results <- mapM eval xs
@@ -152,7 +156,7 @@ eval (ClusterLookup names keys) = do
   nameSet <- eval names
   keySet  <- eval keys
 
-  results <- mapM eval . S.toList $
+  results <- mapM eval $
     foldMap (\name ->
       foldMap (clusterLookupKey state name) keySet) nameSet
 
@@ -174,9 +178,9 @@ eval (NumericRange prefix width low high) = do
 -- type system.
 eval (Regexp _) = return S.empty
 
-clusterLookupKey :: State -> Identifier -> Identifier -> S.HashSet Expression
+clusterLookupKey :: State -> Identifier -> Identifier -> [Expression]
 clusterLookupKey state name "KEYS" =
-  S.fromList $ map Const $ M.keys $ state
+  map Const $ M.keys $ state
     ^. clusters
     ^. at name . non M.empty
 
@@ -184,7 +188,7 @@ clusterLookupKey state name key =
   state
     ^. clusters
     ^. at name . non M.empty
-    ^. at key . non S.empty
+    ^. at key . non []
 
 emptyState = State { _clusters = M.empty }
 
