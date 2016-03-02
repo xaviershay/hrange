@@ -32,8 +32,9 @@ import System.Environment (lookupEnv)
 
 type RangeSpec = M.HashMap String [S.HashSet String]
 
-type RawCluster = M.HashMap (Identifier ResultElement) [T.Text]
+type RawCluster = M.HashMap (Identifier PostEval) [T.Text]
 
+-- TODO: Skip RawCluster, parse straight into Cluster
 instance Y.FromJSON RawCluster where
   parseJSON (Y.Object o) = do
     cluster <- mapM parseKey (M.toList o)

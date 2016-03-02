@@ -30,11 +30,11 @@ import GHC.Generics
 newtype Identifier a = Identifier T.Text deriving (Show, Eq, Generic)
 instance Hashable (Identifier a)
 
-data Partial
-data ResultElement
+data PreEval
+data PostEval
 
-toPartial :: T.Text -> Identifier Partial
-toPartial x = Identifier x
+toPreEval :: T.Text -> Identifier PreEval
+toPreEval x = Identifier x
 
 toConst (Identifier k) = Const (Identifier k)
 
@@ -65,8 +65,8 @@ data Expression =
   FunctionClusters Expression |
   FunctionAllClusters |
   Product [Expression] |
-  NumericRange (Identifier Partial) Int Integer Integer |
-  Const (Identifier Partial)
+  NumericRange (Identifier PreEval) Int Integer Integer |
+  Const (Identifier PreEval)
 
   deriving (Eq, Show, Generic)
 
@@ -76,12 +76,12 @@ instance Hashable Expression
 -- Cluster expressions should be unique (i.e. a set), but that doesn't really
 -- buy us anything implementation wise. It's easier (and strictly more accurate
 -- to the source data) to store as a list.
-type Cluster = M.HashMap (Identifier ResultElement) [Expression]
+type Cluster = M.HashMap (Identifier PostEval) [Expression]
 
 -- TODO: newtype this and provide union/intersect implementations to abstract
 -- away Set type. Need benchmarks to work with first.
-type Result = S.HashSet (Identifier ResultElement)
-type ClusterMap = M.HashMap (Identifier ResultElement) Cluster -- TODO: Is ResultElement right here?
+type Result = S.HashSet (Identifier PostEval)
+type ClusterMap = M.HashMap (Identifier PostEval) Cluster -- TODO: Is PostEval right here?
 data State = State { _clusters :: ClusterMap } deriving (Show)
 makeLenses ''State
 
@@ -159,20 +159,20 @@ eval (FunctionHas keys names) = do
       names <- mapM eval (exprsAtKey cluster key)
       return $ foldr S.union S.empty names
 
-    exprsAtKey :: Cluster -> Identifier ResultElement -> [Expression]
+    exprsAtKey :: Cluster -> Identifier PostEval -> [Expression]
     exprsAtKey cluster key = cluster ^. at key . non []
 
 eval (Product xs) = do
   results <- mapM eval xs
 
-  let asList   = map S.toList results :: [[Identifier ResultElement]]
+  let asList   = map S.toList results :: [[Identifier PostEval]]
   let combined = map T.concat $ sequence (map (map unwrap) asList) :: [T.Text]
   let typed    = map toResult combined
 
   return . S.fromList $ typed
 
   where
-    toResult :: T.Text -> Identifier ResultElement
+    toResult :: T.Text -> Identifier PostEval
     toResult x = Identifier x
 
     unwrap (Identifier x) = x
@@ -196,7 +196,7 @@ eval (NumericRange (Identifier prefix) width low high) = do
   return . S.fromList $ map (toResult . (prefix <>)) nums
 
   where
-    toResult :: T.Text -> Identifier ResultElement
+    toResult :: T.Text -> Identifier PostEval
     toResult x = Identifier x
     
 -- Some implementations return %{allclusters()} matched against the regex. On a
@@ -209,7 +209,7 @@ eval (NumericRange (Identifier prefix) width low high) = do
 -- type system.
 eval (Regexp _) = return S.empty
 
-clusterLookupKey :: State -> Identifier ResultElement -> Identifier ResultElement -> [Expression]
+clusterLookupKey :: State -> Identifier PostEval -> Identifier PostEval -> [Expression]
 clusterLookupKey state name (Identifier "KEYS") =
   map toConst $ M.keys $ state
     ^. clusters
@@ -223,7 +223,7 @@ clusterLookupKey state name key =
 
 emptyState = State { _clusters = M.empty }
 
-addCluster :: Identifier ResultElement -> Cluster -> State -> State
+addCluster :: Identifier PostEval -> Cluster -> State -> State
 addCluster name cluster = clusters %~ M.insert name cluster
 
 fromMap x = State { _clusters = x }
