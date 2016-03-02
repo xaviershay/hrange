@@ -24,6 +24,9 @@ import qualified Data.Yaml as Y
 import Data.Scientific (toBoundedInteger, isInteger, Scientific)
 
 import Control.Monad (replicateM)
+import Control.Monad.Identity
+import Control.Monad.Except
+import Control.Monad.Reader
 import Lib
 import Parser
 
@@ -31,28 +34,33 @@ import System.Environment (lookupEnv)
 
 
 type RangeSpec = M.HashMap String [S.HashSet String]
+type MyParser a = ExceptT String (Reader T.Text) a
 
-type RawCluster = M.HashMap (Identifier PostEval) [T.Text]
+parseYAML :: Y.Value -> MyParser Cluster
+parseYAML (Y.Object o) = do
+  cluster <- mapM parseKey (M.toList o)
+  return . M.fromList $ cluster
 
--- TODO: Skip RawCluster, parse straight into Cluster
-instance Y.FromJSON RawCluster where
-  parseJSON (Y.Object o) = do
-    cluster <- mapM parseKey (M.toList o)
-    return . M.fromList $ cluster
+parseYAML invalid = fail "YAML top-level object was not an object"
 
-  parseJSON invalid = fail "YAML top-level object was not an object"
-
+parseKey :: (T.Text, Y.Value) -> MyParser (Identifier PostEval, [Expression])
 parseKey (x, exprs) = do
-  parsed <- parseExprs exprs
+  parsed <- parseExprs (parseExpr $ parseRange (Just . mkConst . T.unpack $ x)) exprs
   return $ (Identifier x, parsed)
 
-parseExprs :: Y.Value -> Y.Parser [T.Text]
-parseExprs (Y.String x) = return [x]
-parseExprs (Y.Number x) = return [T.pack . formatScientific $ x]
-parseExprs (Y.Bool x)   = return [T.pack . show $ x]
-parseExprs (Y.Object _) = fail "Nested objects not allowed"
-parseExprs (Y.Array xs) = concat <$> mapM parseExprs (V.toList xs)
-parseExprs Y.Null       = return []
+parseExprs :: (String -> MyParser Expression) -> Y.Value -> MyParser [Expression]
+parseExprs f (Y.Array xs) = concat <$> mapM (parseExprs f) (V.toList xs)
+parseExprs f (Y.String x) = replicate 1 <$> f (T.unpack x)
+parseExprs f (Y.Number x) = replicate 1 <$> f (formatScientific x)
+parseExprs f (Y.Bool x)   = replicate 1 <$> f (show x)
+parseExprs f Y.Null       = return []
+parseExprs f (Y.Object _) = fail "Nested objects not allowed"
+
+parseExpr :: (String -> ParseResult) -> String -> MyParser Expression
+parseExpr f expr =
+  case f expr of
+    Left err  -> fail $ "Invalid range expression: " ++ expr
+    Right exp -> return exp
 
 formatScientific :: Scientific -> String
 formatScientific x = if isInteger x then
@@ -70,12 +78,15 @@ main = do
 
   -- TODO: Load YAML files also
   contents <- mapM readFile specs
-  clusters <- mapM decodeFileWithPath yamls
+  raw <- mapM decodeFileWithPath yamls
+  let clusters = map (\(path, Just x) -> (path, Just . fromRight $ runReader (runExceptT (parseYAML x)) "hi")) raw
+
   -- TODO: Error on bad clusters
   -- TODO: This is a mess
-  let parsedClusters = map (\(fp, c) -> (fp, parseCluster (fp, c))) clusters
+  --let parsedClusters = map (\(fp, c) -> (fp, parseCluster (fp, c))) clusters
+  let parsedClusters = clusters
 
-  let parsedClusters' = M.fromListWith M.union (map (\(k, v) -> (takeDirectory k, M.singleton (Identifier . T.pack . takeBaseName $ k) (fromRight v))) parsedClusters)
+  let parsedClusters' = M.fromListWith M.union (map (\(k, v) -> (takeDirectory k, M.singleton (Identifier . T.pack . takeBaseName $ k) (fromJust v))) parsedClusters)
 
   let parsedSpecs = rights (zipWith (curry parseSpec) specs contents)
   --putStrLn $ ppShow parsedSpecs
@@ -89,18 +100,6 @@ decodeFileWithPath path = do
     return (path, content)
 
 fromRight (Right x) = x
-
-parseCluster :: (FilePath, Maybe RawCluster) -> Either String Cluster
-parseCluster (_, Nothing) = Left "Could not read or parse as YAML"
-parseCluster (fp, Just xs) = if null errors then
-                               Right $ M.map rights parsedMap
-                             else
-                               Left . unlines $ map show errors
-
-  where
-    errors = concatMap lefts $ M.elems parsedMap
-    clusterName = Just . mkConst $ takeBaseName fp
-    parsedMap = M.map (map $ parseRange clusterName . T.unpack) xs
 
 eol = char '\n'
 
@@ -173,6 +172,7 @@ specTest state (expr, expected) =
     step "Parsing"
     assert $ isRight actual
 
+    traceM $ ppShow state
     step $ "Evaluating " ++ show (fromRight actual)
     expected @=? results
   where

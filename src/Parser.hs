@@ -19,7 +19,9 @@ import Text.Printf (printf)
 
 import qualified Text.Regex.TDFA as R
 
-parseRange :: Maybe Expression -> String -> Either ParseError Expression
+type ParseResult = Either ParseError Expression
+
+parseRange :: Maybe Expression -> String -> ParseResult
 parseRange localCluster input = runParser rangeExpr localCluster input input
 
 rangeExpr = outerExpr <* eof
