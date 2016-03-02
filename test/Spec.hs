@@ -32,7 +32,7 @@ import System.Environment (lookupEnv)
 
 type RangeSpec = M.HashMap String [S.HashSet String]
 
-type RawCluster = M.HashMap ClusterKey [T.Text]
+type RawCluster = M.HashMap (Identifier ResultElement) [T.Text]
 
 instance Y.FromJSON RawCluster where
   parseJSON (Y.Object o) = do
@@ -43,7 +43,7 @@ instance Y.FromJSON RawCluster where
 
 parseKey (x, exprs) = do
   parsed <- parseExprs exprs
-  return $ (ClusterKey x, parsed)
+  return $ (Identifier x, parsed)
 
 parseExprs :: Y.Value -> Y.Parser [T.Text]
 parseExprs (Y.String x) = return [x]

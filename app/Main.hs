@@ -9,9 +9,9 @@ import qualified Data.HashMap.Strict as M
 import qualified Data.HashSet as S
 
 state =
-  addCluster (Identifier "again") (M.singleton (ClusterKey "CLUSTER") [mkConst "c"]) $
-  addCluster (Identifier "hello") (M.singleton (ClusterKey "CLUSTER") [mkConst "a", ClusterLookup (mkConst "again") (mkConst "CLUSTER")]) $
-  addCluster (Identifier "blah") (M.singleton (ClusterKey "ALL") [mkConst "x"]) $
+  addCluster (Identifier "again") (M.singleton (Identifier "CLUSTER") [mkConst "c"]) $
+  addCluster (Identifier "hello") (M.singleton (Identifier "CLUSTER") [mkConst "a", ClusterLookup (mkConst "again") (mkConst "CLUSTER")]) $
+  addCluster (Identifier "blah") (M.singleton (Identifier "ALL") [mkConst "x"]) $
   emptyState
 
 main :: IO ()
