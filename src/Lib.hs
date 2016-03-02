@@ -33,9 +33,6 @@ instance Hashable (Identifier a)
 data PreEval
 data PostEval
 
-toPreEval :: T.Text -> Identifier PreEval
-toPreEval x = Identifier x
-
 toConst (Identifier k) = Const (Identifier k)
 
 -- Regex doesn't implement Show, Eq, etc which is pretty annoying
@@ -223,7 +220,10 @@ clusterLookupKey state name key =
 
 emptyState = State { _clusters = M.empty }
 
-addCluster :: Identifier PostEval -> Cluster -> State -> State
-addCluster name cluster = clusters %~ M.insert name cluster
+addCluster :: T.Text -> Cluster -> State -> State
+addCluster name cluster = clusters %~ M.insert (Identifier name) cluster
+
+mkKey :: T.Text -> [Expression] -> Cluster
+mkKey name = M.singleton (Identifier name)
 
 fromMap x = State { _clusters = x }
