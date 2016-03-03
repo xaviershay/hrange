@@ -34,7 +34,7 @@ import System.Environment (lookupEnv)
 
 
 type RangeSpec = M.HashMap String [S.HashSet String]
-type MyParser a = ExceptT String (Reader T.Text) a
+type MyParser a = ExceptT String (Reader String) a
 
 parseYAML :: Y.Value -> MyParser Cluster
 parseYAML (Y.Object o) = do
@@ -45,7 +45,8 @@ parseYAML invalid = fail "YAML top-level object was not an object"
 
 parseKey :: (T.Text, Y.Value) -> MyParser (Identifier PostEval, [Expression])
 parseKey (x, exprs) = do
-  parsed <- parseExprs (parseExpr $ parseRange (Just . mkConst . T.unpack $ x)) exprs
+  clusterName <- ask
+  parsed <- parseExprs (parseExpr $ parseRange (Just . mkConst $ clusterName)) exprs
   return $ (Identifier x, parsed)
 
 parseExprs :: (String -> MyParser Expression) -> Y.Value -> MyParser [Expression]
@@ -79,7 +80,7 @@ main = do
   -- TODO: Load YAML files also
   contents <- mapM readFile specs
   raw <- mapM decodeFileWithPath yamls
-  let clusters = map (\(path, Just x) -> (path, Just . fromRight $ runReader (runExceptT (parseYAML x)) "hi")) raw
+  let clusters = map (\(path, Just x) -> (path, Just . fromRight $ runReader (runExceptT (parseYAML x)) (takeBaseName path))) raw
 
   -- TODO: Error on bad clusters
   -- TODO: This is a mess
@@ -172,7 +173,6 @@ specTest state (expr, expected) =
     step "Parsing"
     assert $ isRight actual
 
-    traceM $ ppShow state
     step $ "Evaluating " ++ show (fromRight actual)
     expected @=? results
   where

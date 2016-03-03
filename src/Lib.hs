@@ -1,30 +1,27 @@
+{-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE PackageImports #-} -- TODO: Understand what this doe
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE PackageImports    #-}
+{-# LANGUAGE TemplateHaskell   #-}
 
 module Lib
     ( module Lib
     ) where
 
-import qualified Data.Text as T
-import qualified Data.HashMap.Strict as M
-import qualified Data.HashSet as S
-import Control.Lens hiding (Const)
-
-import Control.Applicative ((<$>), (<*>))
-import Control.Monad
+import           Control.Applicative    ((<$>), (<*>))
+import           Control.Lens           hiding (Const)
+import           Control.Monad
 import           "mtl" Control.Monad.Identity
 import           "mtl" Control.Monad.Reader
-import Data.Foldable
-import Data.Hashable
-import Data.Monoid ((<>))
-
-import Text.Printf (printf)
-import Text.Regex.TDFA as R
-
-import GHC.Generics
+import           Data.Foldable
+import           Data.Hashable
+import qualified Data.HashMap.Strict    as M
+import qualified Data.HashSet           as S
+import           Data.Monoid            ((<>))
+import qualified Data.Text              as T
+import           GHC.Generics
+import           Text.Printf            (printf)
+import           Text.Regex.TDFA        as R
 
 -- TODO: Don't export Identifier, provide constructors.
 newtype Identifier a = Identifier T.Text deriving (Show, Eq, Generic)
@@ -195,7 +192,7 @@ eval (NumericRange (Identifier prefix) width low high) = do
   where
     toResult :: T.Text -> Identifier PostEval
     toResult x = Identifier x
-    
+
 -- Some implementations return %{allclusters()} matched against the regex. On a
 -- suspicion that this a pattern that should be discouraged, I'm opting here to
 -- return empty and prevent the parser from generating regex expression outside
