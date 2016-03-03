@@ -12,7 +12,7 @@ import           Data.Either
 import qualified Data.HashMap.Strict    as M
 import qualified Data.HashSet           as S
 import           Data.Maybe
-import           Data.Scientific        (Scientific, isInteger)
+import           Data.Scientific        (Scientific, isInteger, toBoundedInteger)
 import qualified Data.Text              as T
 import qualified Data.Vector            as V
 import qualified Data.Yaml              as Y
@@ -21,29 +21,32 @@ import           System.FilePath        (takeBaseName, takeDirectory)
 import           System.FilePath.Find
 import           Test.Tasty
 import           Test.Tasty.HUnit
-import qualified Test.Tasty.QuickCheck  as QC
+import           Test.Tasty.QuickCheck
 import           Text.Parsec
 import qualified Text.Regex.TDFA        as R
 import           Text.Show.Pretty
 
 
 type RangeSpec = M.HashMap String [S.HashSet String]
-type MyParser a = ExceptT String (Reader String) a
+type ParserWithState a = ExceptT String (Reader String) a
 
-parseYAML :: Y.Value -> MyParser Cluster
+parseYAML :: Y.Value -> ParserWithState Cluster
 parseYAML (Y.Object o) = do
   cluster <- mapM parseKey (M.toList o)
   return . M.fromList $ cluster
 
 parseYAML invalid = fail "YAML top-level object was not an object"
 
-parseKey :: (T.Text, Y.Value) -> MyParser (Identifier PostEval, [Expression])
+parseKey :: (T.Text, Y.Value) ->
+            ParserWithState (Identifier PostEval, [Expression])
 parseKey (x, exprs) = do
   clusterName <- ask
   parsed <- parseExprs (parseExpr $ parseRange (Just . mkConst $ clusterName)) exprs
   return $ (Identifier x, parsed)
 
-parseExprs :: (String -> MyParser Expression) -> Y.Value -> MyParser [Expression]
+parseExprs :: (String -> ParserWithState Expression) ->
+              Y.Value ->
+              ParserWithState [Expression]
 parseExprs f (Y.Array xs) = concat <$> mapM (parseExprs f) (V.toList xs)
 parseExprs f (Y.String x) = replicate 1 <$> f (T.unpack x)
 parseExprs f (Y.Number x) = replicate 1 <$> f (formatScientific x)
@@ -51,7 +54,9 @@ parseExprs f (Y.Bool x)   = replicate 1 <$> f (show x)
 parseExprs f Y.Null       = return []
 parseExprs f (Y.Object _) = fail "Nested objects not allowed"
 
-parseExpr :: (String -> ParseResult) -> String -> MyParser Expression
+parseExpr :: (String -> ParseResult) ->
+             String ->
+             ParserWithState Expression
 parseExpr f expr =
   case f expr of
     Left err  -> fail $ "Invalid range expression: " ++ expr
@@ -156,7 +161,7 @@ smallInt = elements [0..10]
 printable = T.pack <$> listOf1 (elements ['a'..'z'])
 
 quickchecks =
-  [ QC.testProperty "eval is fully defined" $
+  [ testProperty "eval is fully defined" $
       \expr -> runEval emptyState (eval expr) `seq` True
   ]
 
