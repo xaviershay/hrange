@@ -1,36 +1,30 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-import Test.Tasty
-import Test.Tasty.HUnit
-import Test.Tasty.QuickCheck as QC
-import System.FilePath.Find
+import           Lib
+import           Parser
 
-import Debug.Trace
-
-import Data.Maybe
-import Data.Either
-
-import qualified Data.Text as T
-import Text.Parsec
-import Text.Show.Pretty
-import qualified Text.Regex.TDFA as R
-
-import System.FilePath (takeDirectory, takeBaseName)
-import qualified Data.HashMap.Strict as M
-import qualified Data.HashSet as S
-import qualified Data.Vector as V
-import qualified Data.Yaml as Y
-import Data.Scientific (toBoundedInteger, isInteger, Scientific)
-
-import Control.Monad (replicateM)
-import Control.Monad.Identity
-import Control.Monad.Except
-import Control.Monad.Reader
-import Lib
-import Parser
-
-import System.Environment (lookupEnv)
+import           Control.Monad          (replicateM)
+import           Control.Monad.Except
+import           Control.Monad.Identity
+import           Control.Monad.Reader
+import           Data.Either
+import qualified Data.HashMap.Strict    as M
+import qualified Data.HashSet           as S
+import           Data.Maybe
+import           Data.Scientific        (Scientific, isInteger)
+import qualified Data.Text              as T
+import qualified Data.Vector            as V
+import qualified Data.Yaml              as Y
+import           System.Environment     (lookupEnv)
+import           System.FilePath        (takeBaseName, takeDirectory)
+import           System.FilePath.Find
+import           Test.Tasty
+import           Test.Tasty.HUnit
+import qualified Test.Tasty.QuickCheck  as QC
+import           Text.Parsec
+import qualified Text.Regex.TDFA        as R
+import           Text.Show.Pretty
 
 
 type RangeSpec = M.HashMap String [S.HashSet String]
@@ -77,24 +71,27 @@ main = do
   specs <- maybe (return []) (\x -> find always (extension ==? ".spec") (x ++ "/spec/expand")) specPath
   yamls <- maybe (return []) (\x -> find always (extension ==? ".yaml") (x ++ "/spec/expand")) specPath
 
-  -- TODO: Load YAML files also
   contents <- mapM readFile specs
-  raw <- mapM decodeFileWithPath yamls
-  let clusters = map (\(path, Just x) -> (path, Just . fromRight $ runReader (runExceptT (parseYAML x)) (takeBaseName path))) raw
+  raw      <- mapM decodeFileWithPath yamls
+
+  let clusters = map parseClusters raw
 
   -- TODO: Error on bad clusters
-  -- TODO: This is a mess
-  --let parsedClusters = map (\(fp, c) -> (fp, parseCluster (fp, c))) clusters
-  let parsedClusters = clusters
+  let parsedClusters = rights clusters
 
-  let parsedClusters' = M.fromListWith M.union (map (\(k, v) -> (takeDirectory k, M.singleton (Identifier . T.pack . takeBaseName $ k) (fromJust v))) parsedClusters)
+  -- TODO: This is a mess
+  let parsedClusters' = M.fromListWith M.union (map (\(k, v) -> (takeDirectory k, M.singleton (Identifier . T.pack . takeBaseName $ k) v)) parsedClusters)
 
   let parsedSpecs = rights (zipWith (curry parseSpec) specs contents)
-  --putStrLn $ ppShow parsedSpecs
-  -- TODO: include keys in specs, map keys to directory, merge specs + clusters
-  -- into single data structure.
 
   defaultMain (tests parsedSpecs parsedClusters')
+
+  where
+    parseClusters (path, Nothing) = fail "Invalid YAML"
+    parseClusters (path, Just x) = do
+      cluster <- runReader (runExceptT $ parseYAML x) (takeBaseName path)
+
+      return (path, cluster)
 
 decodeFileWithPath path = do
     content <- Y.decodeFile path
