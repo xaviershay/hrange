@@ -2,84 +2,32 @@
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PackageImports    #-}
-{-# LANGUAGE TemplateHaskell   #-}
 
 module Lib
     ( module Lib
     ) where
 
+import Yaml
+import Types
+import Parser
 import           Control.Applicative    ((<$>), (<*>))
 import           Control.Lens           hiding (Const)
 import           Control.Monad
 import           "mtl" Control.Monad.Identity
 import           "mtl" Control.Monad.Reader
-import           Data.Foldable
-import           Data.Hashable
+import           Data.Foldable  hiding (find)
 import qualified Data.HashMap.Strict    as M
 import qualified Data.HashSet           as S
 import           Data.Monoid            ((<>))
 import qualified Data.Text              as T
 import           GHC.Generics
 import           Text.Printf            (printf)
+import           Control.Monad.Except
+import           Data.Either
+import qualified Data.Yaml              as Y
+import           System.FilePath        (takeBaseName, takeDirectory)
+import           System.FilePath.Find
 import           Text.Regex.TDFA        as R
-
--- TODO: Don't export Identifier, provide constructors.
-newtype Identifier a = Identifier T.Text deriving (Show, Eq, Generic)
-instance Hashable (Identifier a)
-
-data PreEval
-data PostEval
-
-toConst (Identifier k) = Const (Identifier k)
-
--- Regex doesn't implement Show, Eq, etc which is pretty annoying
-data ShowableRegex = ShowableRegex String R.Regex
-
-instance Hashable ShowableRegex where
-  hashWithSalt salt (ShowableRegex x _) = hashWithSalt salt x
-
-instance Show ShowableRegex where
-  show (ShowableRegex x _) = "/" ++ x ++ "/"
-
-instance Eq ShowableRegex where
-  (ShowableRegex x _) == (ShowableRegex y _) = x == y
-
-makeShowableRegex x = do
-  rx <- makeRegexM x
-
-  return . Regexp $ ShowableRegex x (rx :: R.Regex)
-
-data Expression =
-  Intersection Expression Expression |
-  Difference Expression Expression |
-  Union Expression Expression |
-  ClusterLookup Expression Expression |
-  Regexp ShowableRegex |
-  FunctionHas Expression Expression |
-  FunctionClusters Expression |
-  FunctionAllClusters |
-  Product [Expression] |
-  NumericRange (Identifier PreEval) Int Integer Integer |
-  Const (Identifier PreEval)
-
-  deriving (Eq, Show, Generic)
-
-
-instance Hashable Expression
-
--- Cluster expressions should be unique (i.e. a set), but that doesn't really
--- buy us anything implementation wise. It's easier (and strictly more accurate
--- to the source data) to store as a list.
-type Cluster = M.HashMap (Identifier PostEval) [Expression]
-
--- TODO: newtype this and provide union/intersect implementations to abstract
--- away Set type. Need benchmarks to work with first.
-type Result = S.HashSet (Identifier PostEval)
-type ClusterMap = M.HashMap (Identifier PostEval) Cluster -- TODO: Is PostEval right here?
-data State = State { _clusters :: ClusterMap } deriving (Show)
-makeLenses ''State
-
-type Eval a = ReaderT State Identity a
 
 runEval :: State -> Eval a -> a
 runEval state e = runIdentity (runReaderT e state)
@@ -88,8 +36,6 @@ mapFilterM :: (Monad m) => (Cluster -> m Bool) -> ClusterMap -> m ClusterMap
 mapFilterM p clusters = do
   matching <- filterM (p . snd) (M.toList clusters)
   return $ M.fromList matching
-
-mkConst x = Const $ Identifier . T.pack $ x
 
 eval :: Expression -> Eval Result
 eval (Const id)         = return $ S.singleton (toResult id)
@@ -224,3 +170,30 @@ mkKey :: T.Text -> [Expression] -> Cluster
 mkKey name = M.singleton (Identifier name)
 
 fromMap x = State { _clusters = x }
+
+decodeFileWithPath path = do
+    content <- Y.decodeFile path
+    return (path, content)
+
+loadStateFromDirectory dir = do
+  yamls    <- find always (extension ==? ".yaml") dir
+  contents <- mapM readFile yamls
+  raw      <- mapM decodeFileWithPath yamls
+
+  let clusters = map parseClusters raw
+  let clusters' = M.fromList $
+                    map (\(k, v) -> ((Identifier . T.pack . takeBaseName $ k), v)) $
+                    rights clusters -- TODO: How to fail bad ones?
+
+  return $ State { _clusters = clusters' }
+
+parseClusters (path, Nothing) = fail "Invalid YAML"
+parseClusters (path, Just x) = do
+  cluster <- runReader (runExceptT $ parseYAML x) (takeBaseName path)
+
+  return (path, cluster)
+
+rangeEval state query = do
+  expression <- parseRange Nothing query
+
+  return $ runEval state (eval expression)

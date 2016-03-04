@@ -14,7 +14,7 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Lib,Parser
+  exposed-modules:     Lib,Parser,Types,Yaml
   build-depends:       base >= 4.7 && < 5
                      , text
                      , lens
@@ -23,6 +23,11 @@ library
                      , unordered-containers
                      , hashable
                      , regex-tdfa
+                     , yaml
+                     , vector
+                     , filepath
+                     , filemanip
+                     , scientific
   default-language:    Haskell2010
 
 executable hrange-exe
@@ -35,6 +40,7 @@ executable hrange-exe
                      , unordered-containers
                      , hashable
                      , regex-tdfa
+                     , criterion
   default-language:    Haskell2010
 
 test-suite hrange-test
