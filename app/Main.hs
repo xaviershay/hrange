@@ -9,6 +9,8 @@ import qualified Data.Text as T
 import qualified Data.HashMap.Strict as M
 import qualified Data.HashSet as S
 import Criterion.Main
+import System.Environment (getArgs)
+import Control.Monad
 
 state =
   addCluster "again" (mkKey "CLUSTER" [mkConst "c"]) $
@@ -21,14 +23,20 @@ fromRight (Right x) = x
 main :: IO ()
 --main = print $ runEval $ eval state (Difference (GroupLookup (Const "hello") (Const "CLUSTER")) (Const "a"))
 main = do
-  state <- loadStateFromDirectory "bench"
+  args  <- getArgs
+  putStrLn "Loading state..."
+  state <- loadStateFromDirectory (args !! 0)
+  let query = args !! 1
 
-  defaultMain [
-    bgroup "reverse lookup"
-      [ bench "many" $ whnf (S.toList . fromRight . rangeEval state) "clusters(host1)"
-      , bench "one"  $ whnf (S.toList . fromRight . rangeEval state) "has(ONE;host202)"
-      ]
-    ]
+  putStrLn "Eval"
+  case rangeEval state query of
+    --Left x  -> [putStrLn $ show x]
+    Right x -> mapM_ (putStrLn . show) . S.toList $ x
+  --defaultMain [
+  --  bgroup "eval"
+  --    [ bench query $ whnf (S.toList . fromRight . rangeEval state) query
+  --    ]
+  --  ]
   --print $ parseRange Nothing "/a/"
   --print $ parseRange "%hello & there"
   --print $ parseRange "%hello"
