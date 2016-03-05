@@ -29,7 +29,11 @@ main :: IO ()
 --main = print $ runEval $ eval state (Difference (GroupLookup (Const "hello") (Const "CLUSTER")) (Const "a"))
 main = do
     args  <- getArgs
-    state <- loadStateFromDirectory (args !! 0)
+    putStrLn "Loading state"
+    start <- getCurrentTime
+    state <- True `seq` loadStateFromDirectory (args !! 0)
+    finish <- getCurrentTime
+    putStrLn "Loaded state"
 
     let port = 3000
     putStrLn $ "Listening on port " ++ show port
@@ -39,29 +43,46 @@ app :: State -> Request -> (Response -> IO ResponseReceived) -> IO ResponseRecei
 app state req respond = do
     start <- getCurrentTime
     -- CAN FAIL
+    -- PUSH into handle query
     let query = fromRight $ decodeUtf8' $ fst $ head (queryString req) -- TODO: Error handle
 
     --let query = unEscapeString $ drop 1 $ unpack $ rawQueryString req
-    ret <- respond $
-        case pathInfo req of
-            x -> handleQuery state query
+    -- NEEDS TIMEOUT
+    let (status, extra, content) = case handleQuery2 state query of
+      Left err -> (mkStatus 422 "Unprocessable Entity", Nothing, err)
+      Right (query, results) -> (status200, Just query, results)
+
+      -- WIP PICK IT UP HERE
 
     finish <- getCurrentTime
     let remote = show $ remoteHost req :: String
     let dt = fromRational $ toRational $ diffUTCTime finish start :: Float
-    let msg = printf ("QUERY %s %.4f \"%s\"" :: String) remote dt query
+    let msg = printf ("%s %.4f /%s \"%s\"" :: String) remote dt (T.unpack $ T.intercalate "/" $ pathInfo req) (T.replace "\"" "\\\"" query)
     putStrLn $ printf ("%-5s [%s] %s" :: String) ("INFO" :: String) (show finish) (msg :: String)
-    return ret
+    respond resp
 
+decodeQuery :: Request -> Either T.Text T.Text
+decodeQuery req = either (Left . T.pack) Right
+                    (decodeUtf8' $ fst $ f (queryString req))
+  where
+    f (x:_) = Right x
+    f _     = Left "No query present"
 
-yay = responseBuilder status200 [ ("Content-Type", "text/plain") ] $ mconcat $ map copyByteString
-    [ "yay" ]
+handleQuery2 :: State -> Request -> Either Text (Text, Text)
+handleQuery2 state req = do
+    query  <- decodeQuery req
+    result <- rangeEval state (T.unpack query)
 
-handleQuery :: State -> T.Text -> Response
+    (query, T.unwords result)
+
+--(Status, LogExtra, Text)
+-- SUCCESS: 200 (or Text)
+-- Invalid unicode: 422 Text error
+-- Invalid query: 422 Text error
+handleQuery :: State -> T.Text -> IO Response
 handleQuery state query = do
   -- CAN FAIL
-  -- NEEDS TIMEOUT
-  case rangeEval state (T.unpack query) of
+  return $ case rangeEval state (T.unpack query) of
     Left x  -> responseBuilder (mkStatus 422 "Unprocessable Entity") [("Content-Type", "text/plain")] $ mconcat $ map copyByteString [BU.fromString $ show x]
     Right x -> success x
 
@@ -69,9 +90,6 @@ handleQuery state query = do
     success results =
       responseBuilder status200 [("Content-Type", "text/plain")] $ mconcat $ map (copyByteString . BU.fromString . show) . S.toList $ results
 
-index x = responseBuilder status200 [("Content-Type", "text/html")] $ mconcat $ map copyByteString
-    [ "<p>Hello from ", BU.fromString $ show x, "!</p>"
-    , "<p><a href='/yay'>yay</a></p>\n" ]
 --main = do
 --  args  <- getArgs
 --  putStrLn "Loading state..."
