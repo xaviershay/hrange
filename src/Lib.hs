@@ -173,11 +173,10 @@ fromMap x = State { _clusters = x }
 
 decodeFileWithPath path = do
     content <- Y.decodeFile path
-    return (path, content)
+    return $ True `seq` (path, content)
 
 loadStateFromDirectory dir = do
   yamls    <- find always (extension ==? ".yaml") dir
-  contents <- mapM readFile yamls
   raw      <- mapM decodeFileWithPath yamls
 
   let clusters = map parseClusters raw

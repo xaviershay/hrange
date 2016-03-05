@@ -9,7 +9,7 @@ import qualified Data.Text as T
 import qualified Data.HashMap.Strict as M
 import qualified Data.HashSet as S
 import Criterion.Main
-import System.Environment (getArgs)
+import System.Environment (getArgs, withArgs)
 import Control.Monad
 
 state =
@@ -29,14 +29,15 @@ main = do
   let query = args !! 1
 
   putStrLn "Eval"
-  case rangeEval state query of
-    --Left x  -> [putStrLn $ show x]
-    Right x -> mapM_ (putStrLn . show) . S.toList $ x
-  --defaultMain [
-  --  bgroup "eval"
-  --    [ bench query $ whnf (S.toList . fromRight . rangeEval state) query
-  --    ]
-  --  ]
+  --case rangeEval state query of
+  --  --Left x  -> [putStrLn $ show x]
+  --  Right x -> mapM_ (putStrLn . show) . S.toList $ x
+  withArgs [] $
+    defaultMain [
+      bgroup "eval"
+        [ bench query $ whnf (S.toList . fromRight . rangeEval state) query
+        ]
+      ]
   --print $ parseRange Nothing "/a/"
   --print $ parseRange "%hello & there"
   --print $ parseRange "%hello"
