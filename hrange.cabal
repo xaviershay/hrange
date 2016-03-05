@@ -41,6 +41,13 @@ executable hrange-exe
                      , hashable
                      , regex-tdfa
                      , criterion
+                     , blaze-builder
+                     , warp
+                     , wai
+                     , http-types
+                     , utf8-string
+                     , bytestring
+                     , time
   default-language:    Haskell2010
 
 test-suite hrange-test
