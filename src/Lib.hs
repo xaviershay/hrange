@@ -168,9 +168,10 @@ decodeFileWithPath path = do
 
     return $! parseClusters (path, ret)
   where
+    parseClusters :: (FilePath, Maybe Y.Value) -> Either String (FilePath, Cluster)
     parseClusters (path, Nothing) = Left "Invalid YAML"
     parseClusters (path, Just x) = do
-      cluster <- runReader (runExceptT $ parseYAML x) (takeBaseName path)
+      cluster <- runReader (runExceptT $ parseYAML x) (takeBaseName path) :: Either String Cluster
 
       return $! cluster `deepseq` (path, cluster)
 

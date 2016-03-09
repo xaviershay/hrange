@@ -21,7 +21,7 @@ parseYAML (Y.Object o) = do
   cluster <- mapM parseKey (M.toList o)
   return . M.fromList $ cluster
 
-parseYAML invalid = fail "YAML top-level object was not an object"
+parseYAML invalid = throwError "YAML top-level object was not an object"
 
 parseKey :: (T.Text, Y.Value) ->
             ParserWithState (Identifier2, [Expression])
@@ -38,14 +38,14 @@ parseExprs f (Y.String x) = replicate 1 <$> f (T.unpack x)
 parseExprs f (Y.Number x) = replicate 1 <$> f (formatScientific x)
 parseExprs f (Y.Bool x)   = replicate 1 <$> f (show x)
 parseExprs f Y.Null       = return []
-parseExprs f (Y.Object _) = fail "Nested objects not allowed"
+parseExprs f (Y.Object _) = throwError "Nested objects not allowed"
 
 parseExpr :: (String -> ParseResult) ->
              String ->
              ParserWithState Expression
 parseExpr f expr =
   case f expr of
-    Left err  -> fail $ "Invalid range expression: " ++ expr
+    Left err  -> throwError $ "Invalid range expression: " ++ expr
     Right exp -> return exp
 
 formatScientific :: Scientific -> String
