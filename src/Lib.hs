@@ -173,7 +173,7 @@ decodeFileWithPath path = do
 
       return $! cluster `deepseq` (path, cluster)
 
--- Loads a directory of YAML files into a State. Strict.
+-- Loads a directory of YAML files into a State. Strict. Does not recurse.
 loadStateFromDirectory :: FilePath -> IO State
 loadStateFromDirectory dir = do
   yamls     <- find always (extension ==? ".yaml") dir

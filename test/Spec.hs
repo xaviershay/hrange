@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -28,39 +29,77 @@ import           Test.Tasty.QuickCheck
 import           Text.Parsec
 import qualified Text.Regex.TDFA        as R
 import           Text.Show.Pretty
+import System.Directory
+import Debug.Trace
+import System.FilePath.Posix (joinPath)
+import System.IO
+import Data.List
+--import           Control.Lens           hiding (Const)
 
+data RangeSpecCase = RangeSpecCase {
+  _query :: String,
+  _expected :: Result
+} deriving (Show)
+--makeLenses ''RangeSpecCase
 
-type RangeSpec = M.HashMap String [S.HashSet String]
+data RangeSpec = RangeSpec {
+  _path  :: FilePath,
+  _cases :: [RangeSpecCase]
+} deriving (Show)
+--makeLenses ''RangeSpec
+
+listDirectories :: FilePath -> IO [FilePath]
+listDirectories path = do
+  e <- doesDirectoryExist path
+  if e
+    then do
+      files <- getDirectoryContents path
+      let dirs     = filter (not . isPrefixOf ".") files
+      let fullDirs = map (\x -> joinPath [path, x]) dirs
+      ds' <- mapM listDirectories fullDirs
+
+      return (path:concat ds')
+    else return []
+
+loadRangeSpecs :: FilePath -> IO [(RangeSpec, Types.State)]
+loadRangeSpecs dir = do
+  state <- loadStateFromDirectory dir
+  specs <- getDirectoryContents dir
+  let specs' = map (\x -> joinPath [dir, x]) $ filter (isSuffixOf ".spec") specs
+
+  loadedSpecs <- mapM (\x -> withFile x ReadMode (doParse x)) specs'
+
+  return $ map (\x -> (x, state)) loadedSpecs
+
+doParse :: String -> Handle -> IO RangeSpec
+doParse path handle = do
+  contents <- hGetContents handle
+
+  case parse rangeSpec path contents of
+    Left err -> fail $ "Invalid spec file: " ++ path
+    Right parse -> return $ RangeSpec { _path = path, _cases = parse }
+
+  --return $ parseSpec (name, contents)
+
+parseSpec :: (String, String) -> Either ParseError (String, [RangeSpecCase])
+parseSpec (name, input) = f p
+  where
+    p = parse rangeSpec name input
+    f (Right parse) = Right (name, parse)
+    f (Left err)    = Left err
 
 -- TODO: Error on spec parse failure
 -- TODO: Warn when RANGE_SPEC_PATH not set
 main :: IO ()
 main = do
   specPath <- lookupEnv "RANGE_SPEC_PATH"
-  specs <- maybe (return []) (\x -> find always (extension ==? ".spec") (x ++ "/spec/expand")) specPath
-  yamls <- maybe (return []) (\x -> find always (extension ==? ".yaml") (x ++ "/spec/expand")) specPath
 
-  contents <- mapM readFile specs
-  raw      <- mapM decodeFileWithPath yamls
+  dirs <- maybe (return []) (\x -> listDirectories (x ++ "/spec/expand")) specPath
 
-  let clusters = map parseClusters raw
-
-  -- TODO: Error on bad clusters
-  let parsedClusters = rights clusters
-
-  -- TODO: This is a mess
-  let parsedClusters' = M.fromListWith M.union (map (\(k, v) -> (takeDirectory k, M.singleton (T.pack . takeBaseName $ k) v)) parsedClusters)
-
-  let parsedSpecs = rights (zipWith (curry parseSpec) specs contents)
-
-  defaultMain (tests parsedSpecs parsedClusters')
-
-  where
-    parseClusters (path, Nothing) = fail "Invalid YAML"
-    parseClusters (path, Just x) = do
-      cluster <- runReader (runExceptT $ parseYAML x) (takeBaseName path)
-
-      return (path, cluster)
+  putStrLn $ show dirs
+  specs <- mapM loadRangeSpecs dirs
+  let specs' = concat specs
+  defaultMain (tests specs')
 
 fromRight (Right x) = x
 
@@ -83,19 +122,12 @@ rangeSingleSpec = do
   spec <- many (comment <|> line)
   _    <- optionMaybe eol
 
-  return (fromJust expr, S.fromList . map T.pack . catMaybes $ spec)
+  return $ RangeSpecCase (fromJust expr) (S.fromList . map T.pack . catMaybes $ spec)
 
 rangeSpec = many rangeSingleSpec
 
-parseSpec :: (String, String) -> Either ParseError (String, [(String, Result)])
-parseSpec (name, input) = f p
-  where
-    p = parse rangeSpec name input
-    f (Right parse) = Right (name, parse)
-    f (Left err)    = Left err
-
-tests specs clusters = testGroup ""
-  [ testGroup "Range Spec" $ map (rangeSpecs clusters) specs
+tests specs = testGroup ""
+  [ testGroup "Range Spec" $ map rangeSpecs specs
   , testGroup "Quickchecks" quickchecks
   ]
 
@@ -125,12 +157,10 @@ quickchecks =
       \expr -> runEval emptyState (eval expr) `seq` True
   ]
 
-rangeSpecs clusters (name, specs) =
-  testGroup (takeBaseName name) $ map (specTest state) specs
-  where
-    state = fromMap $ M.lookupDefault M.empty (takeDirectory name) clusters
+rangeSpecs (spec, state) =
+  testGroup (takeBaseName (_path spec)) $ map (specTest state) (_cases spec)
 
-specTest state (expr, expected) =
+specTest state specCase =
   testCaseSteps ("Evaluating \"" ++ expr ++ "\"") $ \step -> do
     step "Parsing"
     assert $ isRight actual
@@ -138,6 +168,8 @@ specTest state (expr, expected) =
     step $ "Evaluating " ++ show (fromRight actual)
     expected @=? results
   where
+    expr   = _query specCase
+    expected = _expected specCase
     actual = parseRange Nothing expr
     fromRight (Right r) = r
     results = runEval state $ eval (fromRight actual)
