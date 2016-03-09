@@ -45,6 +45,7 @@ innerExprCluster = innerExprWithExcludes ":"
 innerExprWithExcludes excludes =
   (   clusterLookup
   <|> localClusterLookup
+  <|> defaultClusterLookup
   <|> clustersFunction
   <|> try parentheses
   <|> regex
@@ -77,6 +78,13 @@ localClusterLookup = do
   keys  <- innerExprCluster
 
   return $ ClusterLookup (fromJust name) keys
+
+-- TODO: Make GROUPS customizable
+defaultClusterLookup = do
+  first <- char '@'
+  keys  <- innerExprCluster
+
+  return $ ClusterLookup (mkConst "GROUPS") keys
 
 keys = char ':' *> innerExpr
 
