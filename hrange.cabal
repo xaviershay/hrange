@@ -28,6 +28,7 @@ library
                      , filepath
                      , filemanip
                      , scientific
+                     , deepseq
   default-language:    Haskell2010
 
 executable hrange-exe

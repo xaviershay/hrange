@@ -28,6 +28,7 @@ import qualified Data.Yaml              as Y
 import           System.FilePath        (takeBaseName, takeDirectory)
 import           System.FilePath.Find
 import           Text.Regex.TDFA        as R
+import Control.DeepSeq (deepseq)
 
 runEval :: State -> Eval a -> a
 runEval state e = runIdentity (runReaderT e state)
@@ -156,32 +157,34 @@ mkKey name = M.singleton name
 
 fromMap x = State { _clusters = x }
 
-decodeFileWithPath :: FilePath -> IO (FilePath, Maybe Y.Value)
+-- Strict
+decodeFileWithPath :: FilePath -> IO (Either String (FilePath, Cluster))
 decodeFileWithPath path = do
     content <- Y.decodeFileEither path
     let ret = case content of
                 Left err -> Nothing
                 Right content -> Just content
 
-    return $ True `seq` (path, ret)
+    return $! parseClusters (path, ret)
+  where
+    parseClusters (path, Nothing) = Left "Invalid YAML"
+    parseClusters (path, Just x) = do
+      cluster <- runReader (runExceptT $ parseYAML x) (takeBaseName path)
 
+      return $! cluster `deepseq` (path, cluster)
+
+-- Loads a directory of YAML files into a State. Strict.
 loadStateFromDirectory :: FilePath -> IO State
 loadStateFromDirectory dir = do
-  yamls    <- find always (extension ==? ".yaml") dir
-  raw      <- mapM decodeFileWithPath yamls
+  yamls     <- find always (extension ==? ".yaml") dir
+  clusters  <- mapM decodeFileWithPath yamls
 
-  let clusters = map parseClusters raw
   let clusters' = M.fromList $
                     map (\(k, v) -> ((T.pack . takeBaseName $ k), v)) $
                     rights clusters -- TODO: How to fail bad ones?
 
   return $ State { _clusters = clusters' }
 
-parseClusters (path, Nothing) = Left "Invalid YAML"
-parseClusters (path, Just x) = do
-  cluster <- runReader (runExceptT $ parseYAML x) (takeBaseName path)
-
-  return (path, seq cluster cluster)
 
 rangeEval state query = do
   expression <- parseRange Nothing query
