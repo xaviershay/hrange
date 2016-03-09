@@ -2,3 +2,6 @@ target
 .stack-work
 *.prof
 bench/
+*.ps
+*.hp
+*.aux

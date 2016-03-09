@@ -31,7 +31,7 @@ main = do
     args  <- getArgs
     putStrLn "Loading state"
     start <- getCurrentTime
-    state <- True `seq` loadStateFromDirectory (args !! 0)
+    state <- loadStateFromDirectory (args !! 0)
     finish <- getCurrentTime
     putStrLn "Loaded state"
 
@@ -42,24 +42,21 @@ main = do
 app :: State -> Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived
 app state req respond = do
     start <- getCurrentTime
-    -- CAN FAIL
-    -- PUSH into handle query
-    let query = fromRight $ decodeUtf8' $ fst $ head (queryString req) -- TODO: Error handle
 
-    --let query = unEscapeString $ drop 1 $ unpack $ rawQueryString req
     -- NEEDS TIMEOUT
     let (status, extra, content) = case handleQuery2 state req of
                                      Left err -> (mkStatus 422 "Unprocessable Entity", Nothing, err)
                                      Right (query, results) -> (status200, Just query, results)
 
-      -- WIP PICK IT UP HERE
+    let resp = responseBuilder status [("Content-Type", "text/plain")] $ encodeUtf8Builder content
 
+    -- TODO: Need to force eval before currentTime? Need to start streaming results?
     finish <- getCurrentTime
+    -- TODO: Extract logging elsewhere
     let remote = show $ remoteHost req :: String
     let dt = fromRational $ toRational $ diffUTCTime finish start :: Float
-    let msg = printf ("%s %.4f /%s \"%s\"" :: String) remote dt (T.unpack $ T.intercalate "/" $ pathInfo req) (T.replace "\"" "\\\"" query)
+    let msg = printf ("%s %.4f /%s \"%s\"" :: String) remote dt (T.unpack $ T.intercalate "/" $ pathInfo req) (T.replace "\"" "\\\"" extra)
     putStrLn $ printf ("%-5s [%s] %s" :: String) ("INFO" :: String) (show finish) (msg :: String)
-    let resp = responseBuilder status [("Content-Type", "text/plain")] $ encodeUtf8Builder content
     respond resp
 
 decodeQuery :: Request -> Either T.Text T.Text

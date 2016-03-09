@@ -156,10 +156,16 @@ mkKey name = M.singleton name
 
 fromMap x = State { _clusters = x }
 
+decodeFileWithPath :: FilePath -> IO (FilePath, Maybe Y.Value)
 decodeFileWithPath path = do
-    content <- Y.decodeFile path
-    return $ True `seq` (path, content)
+    content <- Y.decodeFileEither path
+    let ret = case content of
+                Left err -> Nothing
+                Right content -> Just content
 
+    return $ True `seq` (path, ret)
+
+loadStateFromDirectory :: FilePath -> IO State
 loadStateFromDirectory dir = do
   yamls    <- find always (extension ==? ".yaml") dir
   raw      <- mapM decodeFileWithPath yamls
@@ -171,7 +177,7 @@ loadStateFromDirectory dir = do
 
   return $ State { _clusters = clusters' }
 
-parseClusters (path, Nothing) = fail "Invalid YAML"
+parseClusters (path, Nothing) = Left "Invalid YAML"
 parseClusters (path, Just x) = do
   cluster <- runReader (runExceptT $ parseYAML x) (takeBaseName path)
 
