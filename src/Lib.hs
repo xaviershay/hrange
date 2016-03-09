@@ -99,11 +99,12 @@ eval (FunctionHas keys names) = do
     exprsAtKey :: Cluster -> Identifier2 -> [Expression]
     exprsAtKey cluster key = cluster ^. at key . non []
 
+eval (Product []) = return S.empty
 eval (Product xs) = do
   results <- mapM eval xs
 
   let asList   = map S.toList results :: [[Identifier2]]
-  let combined = map T.concat $ sequence (map (map id) asList) :: [T.Text]
+  let combined = map T.concat $ sequence asList :: [T.Text]
 
   return . S.fromList $ combined
 

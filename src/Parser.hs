@@ -57,7 +57,7 @@ innerExprWithExcludes excludes =
 
 -- OUTER EXPRESSIONS
 
-parentheses = char '(' *> outerExpr <* char ')'
+parentheses = char '(' *> (try outerExpr <|> nothing) <* char ')'
 
 joiner t c  = t <$> innerExpr <* spaces <* char c <* spaces <*> outerExpr
 
@@ -123,6 +123,9 @@ regex = do
 constantQ      = mkConst <$> (string "q(" *> many (noneOf ")") <* char ')')
 constantQuotes = mkConst <$> (string "\"" *> many (noneOf "\"") <* char '"')
 
+nothing = do
+  return $ Product []
+
 product excludes = do
   exprs <- many1 (try numericRange <|> try (identifier excludes) <|> productBraces)
   return $
@@ -157,7 +160,7 @@ commonSuffix :: [String] -> String
 commonSuffix xs = map head . takeWhile (\(c:cs) -> (length cs) == l && all (== c) cs) . transpose $ xs
   where l = length xs - 1
 
-productBraces = char '{' *> outerExpr <* char '}'
+productBraces = char '{' *> (try outerExpr <|> nothing) <* char '}'
 
 -- http://www.rosettacode.org/wiki/Strip_a_set_of_characters_from_a_string#Haskell
 stripChars :: String -> String -> String
