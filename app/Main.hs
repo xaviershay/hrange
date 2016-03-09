@@ -22,6 +22,7 @@ import Data.Monoid
 import Debug.Trace
 import Data.Time.Clock (getCurrentTime, diffUTCTime)
 import Text.Printf (printf)
+import Control.Exception (evaluate)
 
 fromRight (Right x) = x
 
@@ -41,6 +42,7 @@ main = do
 
 app :: State -> Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived
 app state req respond = do
+    -- TODO: Extract timing to function
     start <- getCurrentTime
 
     -- NEEDS TIMEOUT
@@ -48,10 +50,11 @@ app state req respond = do
                                      Left err -> (mkStatus 422 "Unprocessable Entity", Nothing, err)
                                      Right (query, results) -> (status200, Just query, results)
 
-    let resp = responseBuilder status [("Content-Type", "text/plain")] $ encodeUtf8Builder content
+    -- Use evaluate at seq to force evaluation so that timing is accurate
+    resp <- evaluate $ content `seq` responseBuilder status [("Content-Type", "text/plain")] $ encodeUtf8Builder content
 
-    -- TODO: Need to force eval before currentTime? Need to start streaming results?
     finish <- getCurrentTime
+
     -- TODO: Extract logging elsewhere
     let remote = show $ remoteHost req :: String
     let dt = fromRational $ toRational $ diffUTCTime finish start :: Float
