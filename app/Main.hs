@@ -55,7 +55,7 @@ app state req respond = do
     -- TODO: Extract logging elsewhere
     let remote = show $ remoteHost req :: String
     let dt = fromRational $ toRational $ diffUTCTime finish start :: Float
-    let msg = printf ("%s %.4f /%s \"%s\"" :: String) remote dt (T.unpack $ T.intercalate "/" $ pathInfo req) (T.replace "\"" "\\\"" extra)
+    let msg = printf ("%s %.4f /%s \"%s\"" :: String) remote dt (T.unpack $ T.intercalate "/" $ pathInfo req) (T.replace "\"" "\\\"" (maybe "" id extra))
     putStrLn $ printf ("%-5s [%s] %s" :: String) ("INFO" :: String) (show finish) (msg :: String)
     respond resp
 

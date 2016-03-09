@@ -33,7 +33,7 @@ mkConst x = Const $ Identifier . T.pack $ x
 
 
 -- Regex doesn't implement Show, Eq, etc which is pretty annoying
-data ShowableRegex = ShowableRegex String R.Regex
+data ShowableRegex = ShowableRegex !String !R.Regex
 
 instance Hashable ShowableRegex where
   hashWithSalt salt (ShowableRegex x _) = hashWithSalt salt x

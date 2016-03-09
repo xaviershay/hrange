@@ -38,7 +38,7 @@ mapFilterM p clusters = do
   return $ M.fromList matching
 
 eval :: Expression -> Eval Result
-eval (Const id)         = return $ S.singleton (toResult id)
+eval (Const id)         = return $! S.singleton (toResult id)
   where
     toResult (Identifier x) = x
 
@@ -181,7 +181,7 @@ parseClusters (path, Nothing) = Left "Invalid YAML"
 parseClusters (path, Just x) = do
   cluster <- runReader (runExceptT $ parseYAML x) (takeBaseName path)
 
-  return (path, cluster)
+  return (path, seq cluster cluster)
 
 rangeEval state query = do
   expression <- parseRange Nothing query
