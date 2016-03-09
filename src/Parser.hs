@@ -49,7 +49,7 @@ innerExprWithExcludes excludes =
   <|> clustersFunction
   <|> try parentheses
   <|> regex
-  <|> constantQ
+  <|> try constantQ
   <|> try function
   <|> constantQuotes
   <|> Parser.product excludes
