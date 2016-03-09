@@ -24,11 +24,11 @@ parseYAML (Y.Object o) = do
 parseYAML invalid = fail "YAML top-level object was not an object"
 
 parseKey :: (T.Text, Y.Value) ->
-            ParserWithState (Identifier PostEval, [Expression])
+            ParserWithState (Identifier2, [Expression])
 parseKey (x, exprs) = do
   clusterName <- ask
   parsed <- parseExprs (parseExpr $ parseRange (Just . mkConst $ clusterName)) exprs
-  return $ (Identifier x, parsed)
+  return $ (x, parsed)
 
 parseExprs :: (String -> ParserWithState Expression) ->
               Y.Value ->

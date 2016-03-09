@@ -49,7 +49,7 @@ main = do
   let parsedClusters = rights clusters
 
   -- TODO: This is a mess
-  let parsedClusters' = M.fromListWith M.union (map (\(k, v) -> (takeDirectory k, M.singleton (Identifier . T.pack . takeBaseName $ k) v)) parsedClusters)
+  let parsedClusters' = M.fromListWith M.union (map (\(k, v) -> (takeDirectory k, M.singleton (T.pack . takeBaseName $ k) v)) parsedClusters)
 
   let parsedSpecs = rights (zipWith (curry parseSpec) specs contents)
 
@@ -83,7 +83,7 @@ rangeSingleSpec = do
   spec <- many (comment <|> line)
   _    <- optionMaybe eol
 
-  return (fromJust expr, S.fromList . map (Identifier . T.pack) . catMaybes $ spec)
+  return (fromJust expr, S.fromList . map T.pack . catMaybes $ spec)
 
 rangeSpec = many rangeSingleSpec
 

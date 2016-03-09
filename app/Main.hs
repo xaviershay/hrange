@@ -6,7 +6,7 @@ import Lib
 import Types
 import Parser
 import qualified Data.Text as T
-import Data.Text.Encoding (decodeUtf8')
+import Data.Text.Encoding (decodeUtf8', encodeUtf8Builder)
 import qualified Data.HashMap.Strict as M
 import qualified Data.HashSet as S
 import Criterion.Main
@@ -48,9 +48,9 @@ app state req respond = do
 
     --let query = unEscapeString $ drop 1 $ unpack $ rawQueryString req
     -- NEEDS TIMEOUT
-    let (status, extra, content) = case handleQuery2 state query of
-      Left err -> (mkStatus 422 "Unprocessable Entity", Nothing, err)
-      Right (query, results) -> (status200, Just query, results)
+    let (status, extra, content) = case handleQuery2 state req of
+                                     Left err -> (mkStatus 422 "Unprocessable Entity", Nothing, err)
+                                     Right (query, results) -> (status200, Just query, results)
 
       -- WIP PICK IT UP HERE
 
@@ -59,21 +59,24 @@ app state req respond = do
     let dt = fromRational $ toRational $ diffUTCTime finish start :: Float
     let msg = printf ("%s %.4f /%s \"%s\"" :: String) remote dt (T.unpack $ T.intercalate "/" $ pathInfo req) (T.replace "\"" "\\\"" query)
     putStrLn $ printf ("%-5s [%s] %s" :: String) ("INFO" :: String) (show finish) (msg :: String)
+    let resp = responseBuilder status [("Content-Type", "text/plain")] $ encodeUtf8Builder content
     respond resp
 
 decodeQuery :: Request -> Either T.Text T.Text
-decodeQuery req = either (Left . T.pack) Right
-                    (decodeUtf8' $ fst $ f (queryString req))
+decodeQuery req = do
+  query <- f (queryString req)
+  either (Left . T.pack . show) Right (decodeUtf8' $ fst $ query)
+
   where
     f (x:_) = Right x
     f _     = Left "No query present"
 
-handleQuery2 :: State -> Request -> Either Text (Text, Text)
+handleQuery2 :: State -> Request -> Either T.Text (T.Text, T.Text)
 handleQuery2 state req = do
     query  <- decodeQuery req
-    result <- rangeEval state (T.unpack query)
+    result <- either (Left . T.pack . show) Right (rangeEval state (T.unpack query))
 
-    (query, T.unwords result)
+    return (query, T.unwords . S.toList $ result)
 
 --(Status, LogExtra, Text)
 -- SUCCESS: 200 (or Text)

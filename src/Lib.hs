@@ -40,7 +40,7 @@ mapFilterM p clusters = do
 eval :: Expression -> Eval Result
 eval (Const id)         = return $ S.singleton (toResult id)
   where
-    toResult (Identifier x) = Identifier x
+    toResult (Identifier x) = x
 
 eval (Union a b)        = S.union        <$> eval a <*> eval b
 
@@ -49,18 +49,14 @@ eval (Intersection (Regexp lhs) (Regexp rhs)) = return S.empty
 eval (Intersection (Regexp lhs) rhs) = eval (Intersection rhs (Regexp lhs))
 eval (Intersection a (Regexp (ShowableRegex _ rx))) = do
   lhs <- eval a
-  return $ S.filter (R.matchTest rx . T.unpack . unwrap) lhs
-  where
-    unwrap (Identifier x) = x
+  return $ S.filter (R.matchTest rx . T.unpack) lhs
 
 eval (Intersection a b) = S.intersection <$> eval a <*> eval b
 
 -- TODO: Fail parse if diff on LHS
 eval (Difference a (Regexp (ShowableRegex _ rx))) = do
   lhs <- eval a
-  return $ S.filter (not . R.matchTest rx . T.unpack . unwrap) lhs
-  where
-    unwrap (Identifier x) = x
+  return $ S.filter (not . R.matchTest rx . T.unpack) lhs
 
 eval (Difference a b)   = S.difference   <$> eval a <*> eval b
 
@@ -70,7 +66,7 @@ eval FunctionAllClusters = do
   return . S.fromList . M.keys $ state ^. clusters
 
 -- TODO: Type checking for number of args
-eval (FunctionClusters names) = eval $ FunctionHas (Const (Identifier "CLUSTER")) names
+eval (FunctionClusters names) = eval $ FunctionHas (mkConst "CLUSTER") names
 
 -- TODO: Type checking for number of args
 eval (FunctionHas keys names) = do
@@ -99,23 +95,16 @@ eval (FunctionHas keys names) = do
       names <- mapM eval (exprsAtKey cluster key)
       return $ foldr S.union S.empty names
 
-    exprsAtKey :: Cluster -> Identifier PostEval -> [Expression]
+    exprsAtKey :: Cluster -> Identifier2 -> [Expression]
     exprsAtKey cluster key = cluster ^. at key . non []
 
 eval (Product xs) = do
   results <- mapM eval xs
 
-  let asList   = map S.toList results :: [[Identifier PostEval]]
-  let combined = map T.concat $ sequence (map (map unwrap) asList) :: [T.Text]
-  let typed    = map toResult combined
+  let asList   = map S.toList results :: [[Identifier2]]
+  let combined = map T.concat $ sequence (map (map id) asList) :: [T.Text]
 
-  return . S.fromList $ typed
-
-  where
-    toResult :: T.Text -> Identifier PostEval
-    toResult x = Identifier x
-
-    unwrap (Identifier x) = x
+  return . S.fromList $ combined
 
 
 eval (ClusterLookup names keys) = do
@@ -133,11 +122,7 @@ eval (ClusterLookup names keys) = do
 eval (NumericRange (Identifier prefix) width low high) = do
   let nums = map (T.pack . printf ("%0" ++ show width ++ "i")) [low..high] :: [T.Text]
 
-  return . S.fromList $ map (toResult . (prefix <>)) nums
-
-  where
-    toResult :: T.Text -> Identifier PostEval
-    toResult x = Identifier x
+  return . S.fromList $ map (prefix <>) nums
 
 -- Some implementations return %{allclusters()} matched against the regex. On a
 -- suspicion that this a pattern that should be discouraged, I'm opting here to
@@ -149,8 +134,8 @@ eval (NumericRange (Identifier prefix) width low high) = do
 -- type system.
 eval (Regexp _) = return S.empty
 
-clusterLookupKey :: State -> Identifier PostEval -> Identifier PostEval -> [Expression]
-clusterLookupKey state name (Identifier "KEYS") =
+clusterLookupKey :: State -> Identifier2 -> Identifier2 -> [Expression]
+clusterLookupKey state name "KEYS" =
   map toConst $ M.keys $ state
     ^. clusters
     ^. at name . non M.empty
@@ -164,10 +149,10 @@ clusterLookupKey state name key =
 emptyState = State { _clusters = M.empty }
 
 addCluster :: T.Text -> Cluster -> State -> State
-addCluster name cluster = clusters %~ M.insert (Identifier name) cluster
+addCluster name cluster = clusters %~ M.insert name cluster
 
 mkKey :: T.Text -> [Expression] -> Cluster
-mkKey name = M.singleton (Identifier name)
+mkKey name = M.singleton name
 
 fromMap x = State { _clusters = x }
 
@@ -181,7 +166,7 @@ loadStateFromDirectory dir = do
 
   let clusters = map parseClusters raw
   let clusters' = M.fromList $
-                    map (\(k, v) -> ((Identifier . T.pack . takeBaseName $ k), v)) $
+                    map (\(k, v) -> ((T.pack . takeBaseName $ k), v)) $
                     rights clusters -- TODO: How to fail bad ones?
 
   return $ State { _clusters = clusters' }

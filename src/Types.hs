@@ -22,10 +22,12 @@ import           Control.Monad.Reader
 newtype Identifier a = Identifier T.Text deriving (Show, Eq, Generic)
 instance Hashable (Identifier a)
 
+type Identifier2 = T.Text
+
 data PreEval
 data PostEval
 
-toConst (Identifier k) = Const (Identifier k)
+toConst k = Const (Identifier k)
 
 mkConst x = Const $ Identifier . T.pack $ x
 
@@ -67,12 +69,12 @@ instance Hashable Expression
 -- Cluster expressions should be unique (i.e. a set), but that doesn't really
 -- buy us anything implementation wise. It's easier (and strictly more accurate
 -- to the source data) to store as a list.
-type Cluster = M.HashMap (Identifier PostEval) [Expression]
+type Cluster = M.HashMap Identifier2 [Expression]
 
 -- TODO: newtype this and provide union/intersect implementations to abstract
 -- away Set type. Need benchmarks to work with first.
-type Result = S.HashSet (Identifier PostEval)
-type ClusterMap = M.HashMap (Identifier PostEval) Cluster -- TODO: Is PostEval right here?
+type Result = S.HashSet Identifier2
+type ClusterMap = M.HashMap Identifier2 Cluster -- TODO: Is PostEval right here?
 data State = State { _clusters :: ClusterMap } deriving (Show)
 makeLenses ''State
 
