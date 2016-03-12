@@ -1,7 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 module Parser
-    ( module Parser
+    ( parseRange
+    , ParseResult
+    , ParseError
     ) where
 
 import Types

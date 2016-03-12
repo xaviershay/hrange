@@ -1,7 +1,9 @@
-{-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PackageImports    #-}
+
+-- Reducing duplication doesn't make sense for this suggestion
+{-# ANN module "HLint: ignore Reduce duplication" #-}
 
 module Lib
     ( module Lib
@@ -10,43 +12,41 @@ module Lib
 import Yaml
 import Types
 import Parser
-import           Control.Applicative    ((<$>), (<*>))
-import           Control.Lens           hiding (Const)
+import Control.Arrow (first)
+import           Control.Lens           ((^.), at, non, (%~))
 import           Control.Monad
 import           "mtl" Control.Monad.Identity
 import           "mtl" Control.Monad.Reader
-import           Data.Foldable  hiding (find)
 import qualified Data.HashMap.Strict    as M
 import qualified Data.HashSet           as S
 import           Data.Monoid            ((<>))
 import qualified Data.Text              as T
-import           GHC.Generics
 import           Text.Printf            (printf)
 import           Control.Monad.Except
 import           Data.Either
 import qualified Data.Yaml              as Y
-import           System.FilePath        (takeBaseName, takeDirectory)
-import           System.FilePath.Find
-import           Text.Regex.TDFA        as R
+import           System.FilePath        (takeBaseName)
+import           System.FilePath.Find   (find, (==?), always, extension)
+import qualified Text.Regex.TDFA        as R
 import Control.DeepSeq (deepseq)
 
 runEval :: State -> Eval a -> a
 runEval state e = runIdentity (runReaderT e state)
 
 mapFilterM :: (Monad m) => (Cluster -> m Bool) -> ClusterMap -> m ClusterMap
-mapFilterM p clusters = do
-  matching <- filterM (p . snd) (M.toList clusters)
+mapFilterM p clusterMap = do
+  matching <- filterM (p . snd) (M.toList clusterMap)
   return $ M.fromList matching
 
 eval :: Expression -> Eval Result
-eval (Const id)         = return $! S.singleton (toResult id)
+eval (Const name)         = return $! S.singleton (toResult name)
   where
     toResult (Identifier x) = x
 
 eval (Union a b)        = S.union        <$> eval a <*> eval b
 
 -- TODO: Fail parse if two regexps
-eval (Intersection (Regexp lhs) (Regexp rhs)) = return S.empty
+eval (Intersection (Regexp _) (Regexp _)) = return S.empty
 eval (Intersection (Regexp lhs) rhs) = eval (Intersection rhs (Regexp lhs))
 eval (Intersection a (Regexp (ShowableRegex _ rx))) = do
   lhs <- eval a
@@ -70,10 +70,10 @@ eval FunctionAllClusters = do
 eval (FunctionClusters names) = eval $ FunctionHas (mkConst "CLUSTER") names
 
 -- TODO: Type checking for number of args
-eval (FunctionHas keys names) = do
+eval (FunctionHas keysExpr namesExpr) = do
   state <- ask
-  nameSet <- eval names
-  keySet  <- eval keys
+  nameSet <- eval namesExpr
+  keySet  <- eval keysExpr
 
   matching <- mapFilterM (hasNamesInKeys nameSet keySet) (state ^. clusters)
 
@@ -109,10 +109,10 @@ eval (Product xs) = do
   return . S.fromList $ combined
 
 
-eval (ClusterLookup names keys) = do
+eval (ClusterLookup namesExpr keysExpr) = do
   state   <- ask
-  nameSet <- eval names
-  keySet  <- eval keys
+  nameSet <- eval namesExpr
+  keySet  <- eval keysExpr
 
   results <- mapM eval $
     foldMap (\name ->
@@ -148,28 +148,27 @@ clusterLookupKey state name key =
     ^. at name . non M.empty
     ^. at key . non []
 
+emptyState :: State
 emptyState = State { _clusters = M.empty }
 
 addCluster :: T.Text -> Cluster -> State -> State
 addCluster name cluster = clusters %~ M.insert name cluster
 
 mkKey :: T.Text -> [Expression] -> Cluster
-mkKey name = M.singleton name
-
-fromMap x = State { _clusters = x }
+mkKey = M.singleton
 
 -- Strict
 decodeFileWithPath :: FilePath -> IO (Either String (FilePath, Cluster))
-decodeFileWithPath path = do
-    content <- Y.decodeFileEither path
+decodeFileWithPath fpath = do
+    content <- Y.decodeFileEither fpath
     let ret = case content of
-                Left err -> Nothing
-                Right content -> Just content
+                Left _ -> Nothing
+                Right x -> Just x
 
-    return $! parseClusters (path, ret)
+    return $! parseClusters (fpath, ret)
   where
     parseClusters :: (FilePath, Maybe Y.Value) -> Either String (FilePath, Cluster)
-    parseClusters (path, Nothing) = Left "Invalid YAML"
+    parseClusters (_, Nothing) = Left "Invalid YAML"
     parseClusters (path, Just x) = do
       cluster <- runReader (runExceptT $ parseYAML x) (takeBaseName path) :: Either String Cluster
 
@@ -179,15 +178,17 @@ decodeFileWithPath path = do
 loadStateFromDirectory :: FilePath -> IO State
 loadStateFromDirectory dir = do
   yamls     <- find always (extension ==? ".yaml") dir
-  clusters  <- mapM decodeFileWithPath yamls
+  clusters'  <- mapM decodeFileWithPath yamls
 
-  let clusters' = M.fromList $
-                    map (\(k, v) -> ((T.pack . takeBaseName $ k), v)) $
-                    rights clusters -- TODO: How to fail bad ones?
+  let clusters'' = M.fromList $
+                    map (first (T.pack . takeBaseName)) $
+                    rights clusters' -- TODO: How to fail bad ones?
 
-  return $ State { _clusters = clusters' }
+  return State { _clusters = clusters'' }
 
 
+-- TODO: Don't expose ParserError?
+rangeEval :: State -> String -> Either ParseError Result
 rangeEval state query = do
   expression <- parseRange Nothing query
 
