@@ -15,7 +15,6 @@ import qualified Data.HashMap.Strict    as M
 import qualified Data.HashSet           as S
 import           Text.Regex.TDFA        as R
 import           GHC.Generics
-import           Control.Monad.Identity
 import           Control.Monad.Reader
 import           Control.DeepSeq (NFData, rnf)
 
@@ -29,8 +28,10 @@ type Identifier2 = T.Text
 data PreEval
 data PostEval
 
+toConst :: T.Text -> Expression
 toConst k = Const (Identifier k)
 
+mkConst :: String -> Expression
 mkConst x = Const $ Identifier . T.pack $ x
 
 -- Regex doesn't implement Show, Eq, etc which is pretty annoying
@@ -45,6 +46,7 @@ instance Show ShowableRegex where
 instance Eq ShowableRegex where
   (ShowableRegex x _) == (ShowableRegex y _) = x == y
 
+makeShowableRegex :: Monad m => String -> m Expression
 makeShowableRegex x = do
   rx <- makeRegexM x
 
@@ -75,12 +77,16 @@ instance NFData Expression
 -- buy us anything implementation wise. It's easier (and strictly more accurate
 -- to the source data) to store as a list.
 type Cluster = M.HashMap Identifier2 [Expression]
+type ReverseClusterMap = M.HashMap (Identifier2, Identifier2) (S.HashSet Identifier2)
 
 -- TODO: newtype this and provide union/intersect implementations to abstract
 -- away Set type. Need benchmarks to work with first.
 type Result = S.HashSet Identifier2
 type ClusterMap = M.HashMap Identifier2 Cluster -- TODO: Is PostEval right here?
-data State = State { _clusters :: ClusterMap } deriving (Show, Generic)
+data State = State {
+  _clusters :: ClusterMap
+} deriving (Show, Generic)
+
 makeLenses ''State
 instance NFData State
 

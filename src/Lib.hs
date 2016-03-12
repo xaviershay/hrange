@@ -2,12 +2,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PackageImports    #-}
 
--- Reducing duplication doesn't make sense for this suggestion
-{-# ANN module "HLint: ignore Reduce duplication" #-}
-
 module Lib
     ( module Lib
     ) where
+
 
 import Yaml
 import Types
@@ -21,6 +19,7 @@ import qualified Data.HashMap.Strict    as M
 import qualified Data.HashSet           as S
 import           Data.Monoid            ((<>))
 import qualified Data.Text              as T
+import Data.Maybe (catMaybes)
 import           Text.Printf            (printf)
 import           Control.Monad.Except
 import           Data.Either
@@ -29,6 +28,9 @@ import           System.FilePath        (takeBaseName)
 import           System.FilePath.Find   (find, (==?), always, extension)
 import qualified Text.Regex.TDFA        as R
 import Control.DeepSeq (deepseq)
+
+-- Reducing duplication doesn't make sense for this suggestion
+{-# ANN module ("HLint: ignore Reduce duplication" :: String) #-}
 
 runEval :: State -> Eval a -> a
 runEval state e = runIdentity (runReaderT e state)
@@ -186,6 +188,26 @@ loadStateFromDirectory dir = do
 
   return State { _clusters = clusters'' }
 
+-- Flattens a cluster map, returning a tuple (name, key, expr) for every entry.
+allEntries :: ClusterMap -> [(Identifier2, Identifier2, Expression)]
+allEntries clusterMap = concatMap (\(name, cluster) ->
+                          concatMap (\(key, exprs) ->
+                            map (\expr -> (name, key, expr)) exprs)
+                          (M.toList cluster))
+                        (M.toList clusterMap)
+
+buildIndex :: ClusterMap -> ReverseClusterMap
+buildIndex clusterMap =
+  let entries = allEntries clusterMap in
+  let staticEntries = catMaybes $ map evalConst entries in
+
+  M.fromListWith S.union $ map (\(n, k, e) -> ((e, k), S.singleton n)) staticEntries
+
+  where
+    evalConst (n, k, Const x) = Just (n, k, toResult x)
+    evalConst (n, k, x)       = Nothing -- TODO: Need to return these and index separately
+
+    toResult (Identifier x) = x
 
 -- TODO: Don't expose ParserError?
 rangeEval :: State -> String -> Either ParseError Result
