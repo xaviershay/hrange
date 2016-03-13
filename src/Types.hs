@@ -78,13 +78,16 @@ instance NFData Expression
 -- to the source data) to store as a list.
 type Cluster = M.HashMap Identifier2 [Expression]
 type ReverseClusterMap = M.HashMap (Identifier2, Identifier2) (S.HashSet Identifier2)
+type ClusterCache = M.HashMap Identifier2 EvaluatedCluster
+type EvaluatedCluster = M.HashMap Identifier2 (S.HashSet Identifier2)
 
 -- TODO: newtype this and provide union/intersect implementations to abstract
 -- away Set type. Need benchmarks to work with first.
 type Result = S.HashSet Identifier2
 type ClusterMap = M.HashMap Identifier2 Cluster -- TODO: Is PostEval right here?
 data State = State {
-  _clusters :: ClusterMap
+  _clusters :: ClusterMap,
+  _clusterCache :: Maybe ClusterCache
 } deriving (Show, Generic)
 
 makeLenses ''State

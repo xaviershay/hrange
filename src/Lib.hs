@@ -7,11 +7,12 @@ module Lib
     ) where
 
 
+import Debug.Trace
 import Yaml
 import Types
 import Parser
 import Control.Arrow (first)
-import           Control.Lens           ((^.), at, non, (%~))
+import           Control.Lens           ((^.), at, non, (%~), (.~), (&), set)
 import           Control.Monad
 import           "mtl" Control.Monad.Identity
 import           "mtl" Control.Monad.Reader
@@ -19,7 +20,7 @@ import qualified Data.HashMap.Strict    as M
 import qualified Data.HashSet           as S
 import           Data.Monoid            ((<>))
 import qualified Data.Text              as T
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, fromJust)
 import           Text.Printf            (printf)
 import           Control.Monad.Except
 import           Data.Either
@@ -27,7 +28,7 @@ import qualified Data.Yaml              as Y
 import           System.FilePath        (takeBaseName)
 import           System.FilePath.Find   (find, (==?), always, extension)
 import qualified Text.Regex.TDFA        as R
-import Control.DeepSeq (deepseq)
+import Control.DeepSeq (deepseq, ($!!))
 
 -- Reducing duplication doesn't make sense for this suggestion
 {-# ANN module ("HLint: ignore Reduce duplication" :: String) #-}
@@ -35,9 +36,9 @@ import Control.DeepSeq (deepseq)
 runEval :: State -> Eval a -> a
 runEval state e = runIdentity (runReaderT e state)
 
-mapFilterM :: (Monad m) => (Cluster -> m Bool) -> ClusterMap -> m ClusterMap
+mapFilterM :: (Monad m) => ((Identifier2, Cluster) -> m Bool) -> ClusterMap -> m ClusterMap
 mapFilterM p clusterMap = do
-  matching <- filterM (p . snd) (M.toList clusterMap)
+  matching <- filterM p (M.toList clusterMap)
   return $ M.fromList matching
 
 eval :: Expression -> Eval Result
@@ -74,32 +75,49 @@ eval (FunctionClusters names) = eval $ FunctionHas (mkConst "CLUSTER") names
 -- TODO: Type checking for number of args
 eval (FunctionHas keysExpr namesExpr) = do
   state <- ask
-  nameSet <- eval namesExpr
   keySet  <- eval keysExpr
+  nameSet <- eval namesExpr
 
   matching <- mapFilterM (hasNamesInKeys nameSet keySet) (state ^. clusters)
 
   return . S.fromList . M.keys $ matching
 
   where
-    hasNamesInKeys names keys cluster = do
+    hasNamesInKeys :: S.HashSet Identifier2 -> S.HashSet Identifier2 -> (Identifier2, Cluster) -> Eval Bool
+    hasNamesInKeys names keys (clusterName, cluster) = do
       hasAny <- mapM (hasNameInKeys cluster keys) $ S.toList names
       return $ or hasAny
 
-    hasNameInKeys cluster keys name = do
-      hasName <- mapM (hasNameInKey cluster name) $ S.toList keys
-      return $ or hasName
+      where
+        hasNameInKeys :: Cluster -> S.HashSet Identifier2 -> Identifier2 -> Eval Bool
+        hasNameInKeys cluster keys name = do
+          hasName <- mapM (hasNameInKey cluster name) $ S.toList keys
+          return $ or hasName
 
-    hasNameInKey cluster name key = do
-      names <- namesAtKey cluster key
-      return $ S.member name names
+        hasNameInKey :: Cluster -> Identifier2 -> Identifier2 -> Eval Bool
+        hasNameInKey cluster name key = do
+          names <- namesAtKey cluster key "bogus"
+          return $ S.member name names
 
-    namesAtKey cluster key = do
-      names <- mapM eval (exprsAtKey cluster key)
-      return $ foldr S.union S.empty names
+        namesAtKey :: Cluster -> Identifier2 -> Identifier2 -> Eval Result
+        namesAtKey cluster key clusterName = do
+          state <- ask
 
-    exprsAtKey :: Cluster -> Identifier2 -> [Expression]
-    exprsAtKey cluster key = cluster ^. at key . non []
+          -- TODO This doesn't work, still gets cache misses
+          let cache = state ^. clusterCache . non M.empty
+          let clusterCache = cache ^. at clusterName :: Maybe EvaluatedCluster
+          let cacheMiss = do
+                            names <- mapM eval (exprsAtKey cluster key)
+                            return $ foldr S.union S.empty names
+
+          case clusterCache of
+            Just c -> return $ c ^. at key . non S.empty
+            Nothing -> cacheMiss
+
+          --maybe cacheMiss cacheHit clusterCache
+
+        exprsAtKey :: Cluster -> Identifier2 -> [Expression]
+        exprsAtKey cluster key = cluster ^. at key . non []
 
 eval (Product []) = return S.empty
 eval (Product xs) = do
@@ -186,7 +204,18 @@ loadStateFromDirectory dir = do
                     map (first (T.pack . takeBaseName)) $
                     rights clusters' -- TODO: How to fail bad ones?
 
-  return State { _clusters = clusters'' }
+  return State { _clusters = clusters'', _clusterCache = Nothing }
+
+analyze :: State -> State
+analyze state = state & clusterCache .~ newCache
+  where
+    newCache = Just $!! M.map (analyzeCluster state) (state ^. clusters)
+
+analyzeCluster :: State -> Cluster -> M.HashMap Identifier2 Result
+analyzeCluster state = M.map (runEvalAll state)
+
+runEvalAll :: State -> [Expression] -> Result
+runEvalAll state = foldl S.union S.empty . map (runEval state . eval)
 
 -- Flattens a cluster map, returning a tuple (name, key, expr) for every entry.
 allEntries :: ClusterMap -> [(Identifier2, Identifier2, Expression)]

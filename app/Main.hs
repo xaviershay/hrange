@@ -22,7 +22,10 @@ import Data.Monoid
 import Debug.Trace
 import Data.Time.Clock (getCurrentTime, diffUTCTime)
 import Text.Printf (printf)
+import Text.Show.Pretty (ppShow)
 import Control.Exception (evaluate)
+import Control.DeepSeq (deepseq, ($!!))
+import Data.Maybe (fromJust)
 
 fromRight (Right x) = x
 
@@ -37,8 +40,10 @@ main = do
     putStrLn "Loaded state"
 
     let port = 3000
-    putStrLn $ "Listening on port " ++ show port
-    run port (app state)
+    let state' = analyze state
+    state' `deepseq` do
+      putStrLn $ "Listening on port " ++ show port
+      run port (app state')
 
 app :: State -> Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived
 app state req respond = do
@@ -76,7 +81,7 @@ handleQuery2 state req = do
     query  <- decodeQuery req
     result <- either (Left . T.pack . show) Right (rangeEval state (T.unpack query))
 
-    return (query, T.unwords . S.toList $ result)
+    return (query, T.unlines . S.toList $ result)
 
 --(Status, LogExtra, Text)
 -- SUCCESS: 200 (or Text)

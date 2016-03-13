@@ -69,7 +69,7 @@ loadRangeSpecs dir = do
 
   loadedSpecs <- mapM (\x -> withFile x ReadMode (doParse x)) specs'
 
-  return $ map (\x -> (x, state)) loadedSpecs
+  return $ map (\x -> (x, analyze state)) loadedSpecs
 
 doParse :: String -> Handle -> IO RangeSpec
 doParse path handle = do
