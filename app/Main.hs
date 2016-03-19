@@ -56,6 +56,7 @@ withTiming action = do
 
   return (dt, result)
 
+buildResponse :: State -> Request -> (Response, Maybe T.Text)
 buildResponse state req =
     let (status, extra, content) = case handleQuery2 state req of
                                      Left err -> (mkStatus 422 "Unprocessable Entity", Nothing, err)
@@ -69,13 +70,18 @@ buildResponse state req =
 app :: State -> Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived
 app state req respond = do
     (dt, (resp, extra)) <- withTiming (buildResponse state req)
-    currentTime         <- getCurrentTime
 
     -- TODO: Extract logging elsewhere
     let remote = show $ remoteHost req :: String
     let msg = printf ("%s %.4f /%s \"%s\"" :: String) remote dt (T.unpack $ T.intercalate "/" $ pathInfo req) (T.replace "\"" "\\\"" (maybe "" id extra))
-    putStrLn $ printf ("%-5s [%s] %s" :: String) ("INFO" :: String) (show currentTime) (msg :: String)
+    logInfo msg
     respond resp
+
+logInfo :: String -> IO ()
+logInfo msg = do
+    currentTime <- getCurrentTime
+    let level = "INFO" :: String
+    putStrLn $ printf ("%-5s [%s] %s" :: String) level (show currentTime) msg
 
 decodeQuery :: Request -> Either T.Text T.Text
 decodeQuery req = do
