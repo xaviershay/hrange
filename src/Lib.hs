@@ -214,7 +214,7 @@ analyze state = state & clusterCache .~ newCache
 -- Strict version of analyze
 analyze' :: State -> State
 analyze' state = let state' = analyze state in
-  state' `deepseq` id state' -- TODO: This is kinda weird, better way?
+  state' `deepseq` state'
 
 analyzeCluster :: State -> Cluster -> M.HashMap Identifier2 Result
 analyzeCluster state = M.map (runEvalAll state)
