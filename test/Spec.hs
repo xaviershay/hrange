@@ -127,7 +127,8 @@ rangeSingleSpec = do
 rangeSpec = many rangeSingleSpec
 
 tests specs = testGroup ""
-  [ testGroup "Range Spec" $ map rangeSpecs specs
+  [ testGroup "Range Spec"              $ map (rangeSpecs id) specs
+  , testGroup "Range Spec (with Cache)" $ map (rangeSpecs analyze) specs
   , testGroup "Quickchecks" quickchecks
   ]
 
@@ -157,8 +158,8 @@ quickchecks =
       \expr -> runEval emptyState (eval expr) `seq` True
   ]
 
-rangeSpecs (spec, state) =
-  testGroup (takeBaseName (_path spec)) $ map (specTest state) (_cases spec)
+rangeSpecs transform (spec, state) =
+  testGroup (takeBaseName (_path spec)) $ map (specTest $ transform state) (_cases spec)
 
 specTest state specCase =
   testCaseSteps ("Evaluating \"" ++ expr ++ "\"") $ \step -> do
