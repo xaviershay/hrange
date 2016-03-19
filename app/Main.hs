@@ -4,30 +4,20 @@ module Main where
 
 import Lib
 import Types
-import Parser
 import qualified Data.Text as T
 import Data.Text.Encoding (decodeUtf8', encodeUtf8Builder)
-import qualified Data.HashMap.Strict as M
 import qualified Data.HashSet as S
-import Criterion.Main
-import System.Environment (getArgs, withArgs)
-import Control.Monad
+--import Criterion.Main
+import System.Environment (getArgs)
 import Network.Wai
 import Network.Wai.Handler.Warp
 import Network.HTTP.Types (status200, mkStatus)
 import Blaze.ByteString.Builder (copyByteString)
 import qualified Data.ByteString.UTF8 as BU
-import Data.ByteString.Char8 (unpack, pack)
-import Data.Monoid
-import Debug.Trace
 import Data.Time.Clock (getCurrentTime, diffUTCTime)
 import Text.Printf (printf)
-import Text.Show.Pretty (ppShow)
 import Control.Exception (evaluate)
-import Control.DeepSeq (deepseq, ($!!))
-import Data.Maybe (fromJust)
 
-fromRight (Right x) = x
 
 main :: IO ()
 --main = print $ runEval $ eval state (Difference (GroupLookup (Const "hello") (Const "CLUSTER")) (Const "a"))
@@ -147,3 +137,5 @@ handleQuery state query = do
   --print $ parseRange "hello - there"
   --print $ parseRange "a & /a/"
   --print $ parseRange "{%abc,b}"
+
+--fromRight (Right x) = x
