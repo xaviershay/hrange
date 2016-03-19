@@ -33,23 +33,25 @@ main :: IO ()
 --main = print $ runEval $ eval state (Difference (GroupLookup (Const "hello") (Const "CLUSTER")) (Const "a"))
 main = do
     args  <- getArgs
-    putStrLn "Loading state"
-    start <- getCurrentTime
-    state <- loadStateFromDirectory (args !! 0)
-    finish <- getCurrentTime
-    putStrLn "Loaded state"
+    logInfo "Loading state"
+
+    (dt, state) <- withTiming $ loadStateFromDirectory (args !! 0)
+    logInfo $ printf "Loaded state in %.4fs, Analyzing..." dt
 
     let port = 3000
-    let state' = analyze state
-    state' `deepseq` do
-      putStrLn $ "Listening on port " ++ show port
-      run port (app state')
+
+    (dt', analyzedState) <- withTiming $ evaluate (analyze' state)
+
+    logInfo $ printf "Analyzed state in %.4fs" dt'
+    logInfo $ "Listening on port " ++ show port
+    run port (app analyzedState)
 
 -- TODO: Support timeouts
-withTiming :: a -> IO (Float, a)
+-- TODO: Use microtimer package
+withTiming :: IO a -> IO (Float, a)
 withTiming action = do
   start  <- getCurrentTime
-  result <- evaluate action
+  result <- action
   finish <- getCurrentTime
 
   let dt = fromRational $ toRational $ diffUTCTime finish start :: Float
@@ -69,7 +71,7 @@ buildResponse state req =
 
 app :: State -> Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived
 app state req respond = do
-    (dt, (resp, extra)) <- withTiming (buildResponse state req)
+    (dt, (resp, extra)) <- withTiming . evaluate $ buildResponse state req
 
     -- TODO: Extract logging elsewhere
     let remote = show $ remoteHost req :: String
