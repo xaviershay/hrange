@@ -45,26 +45,36 @@ main = do
       putStrLn $ "Listening on port " ++ show port
       run port (app state')
 
-app :: State -> Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived
-app state req respond = do
-    -- TODO: Extract timing to function
-    start <- getCurrentTime
+-- TODO: Support timeouts
+withTiming :: a -> IO (Float, a)
+withTiming action = do
+  start  <- getCurrentTime
+  result <- evaluate action
+  finish <- getCurrentTime
 
-    -- NEEDS TIMEOUT
+  let dt = fromRational $ toRational $ diffUTCTime finish start :: Float
+
+  return (dt, result)
+
+buildResponse state req =
     let (status, extra, content) = case handleQuery2 state req of
                                      Left err -> (mkStatus 422 "Unprocessable Entity", Nothing, err)
-                                     Right (query, results) -> (status200, Just query, results)
+                                     Right (query, results) -> (status200, Just query, results) in
 
     -- Use evaluate at seq to force evaluation so that timing is accurate
-    resp <- evaluate $ content `seq` responseBuilder status [("Content-Type", "text/plain")] $ encodeUtf8Builder content
+    let resp = content `seq` responseBuilder status [("Content-Type", "text/plain")] $ encodeUtf8Builder content in
 
-    finish <- getCurrentTime
+    (resp, extra)
+
+app :: State -> Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived
+app state req respond = do
+    (dt, (resp, extra)) <- withTiming (buildResponse state req)
+    currentTime         <- getCurrentTime
 
     -- TODO: Extract logging elsewhere
     let remote = show $ remoteHost req :: String
-    let dt = fromRational $ toRational $ diffUTCTime finish start :: Float
     let msg = printf ("%s %.4f /%s \"%s\"" :: String) remote dt (T.unpack $ T.intercalate "/" $ pathInfo req) (T.replace "\"" "\\\"" (maybe "" id extra))
-    putStrLn $ printf ("%-5s [%s] %s" :: String) ("INFO" :: String) (show finish) (msg :: String)
+    putStrLn $ printf ("%-5s [%s] %s" :: String) ("INFO" :: String) (show currentTime) (msg :: String)
     respond resp
 
 decodeQuery :: Request -> Either T.Text T.Text
