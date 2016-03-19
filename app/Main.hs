@@ -55,6 +55,7 @@ buildResponse state req =
                                      Right (query, results) -> (status200, Just query, results) in
 
     -- Use evaluate at seq to force evaluation so that timing is accurate
+    -- TODO: Above comment is incorrect, timing is wrong
     let resp = content `seq` responseBuilder status [("Content-Type", "text/plain")] $ encodeUtf8Builder content in
 
     (resp, extra)
