@@ -3,8 +3,7 @@
 -- self-referential metadata. It was developed for querying information about
 -- hosts across datacenters.
 --
--- This is an incomplete work-in-progress that may never be completed. Do not
--- use.
+-- /This is an incomplete work-in-progress that may never be completed. Do not use./
 --
 -- The author of this library also authored
 -- <https://godoc.org/github.com/square/grange grange>, which explains any
@@ -14,11 +13,7 @@
 --
 -- A range query operates on a state containing clusters.
 --
--- >>> state = addCluster "a"
---               [("CLUSTER", ["a", "b", "c"])
---               ,("TYPE", ["letters"])
---               ] $
---             emptyState
+-- >>> state = addCluster "a" [("CLUSTER", ["a", "b", "c"]), ("TYPE", ["letters"])] emptyState
 -- >>> expand state "%a"
 -- makeResult ["a", "b", "c"]
 -- >>> expand state "%a:KEYS"
@@ -32,13 +27,7 @@
 -- Values can also be range expressions, so that clusters can be defined in
 -- terms of each other ("self-referential").
 --
--- >>> state = addCluster "down"
---               [ makeClusterEntry "CLUSTER" ["host1"]
---               ] $
---             addCluster "dc1"
---               [ makeClusterEntry "CLUSTER" ["@dc1 - %down"]
---               ] $
---             emptyState
+-- >>> state = addCluster "down" [("CLUSTER", ["host1"])] $ addCluster "dc1" [("CLUSTER", ["@dc1 - %down"])] $ emptyState
 -- >>> expand state "%dc1"
 -- makeResult ["host2"]
 --
