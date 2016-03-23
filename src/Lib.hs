@@ -168,9 +168,6 @@ clusterLookupKey state name key =
     ^. at name . non M.empty
     ^. at key . non []
 
-emptyState :: State
-emptyState = State { _clusters = M.empty }
-
 addCluster :: T.Text -> Cluster -> State -> State
 addCluster name cluster = clusters %~ M.insert name cluster
 
@@ -178,7 +175,7 @@ mkKey :: T.Text -> [Expression] -> Cluster
 mkKey = M.singleton
 
 -- Strict
-decodeFileWithPath :: FilePath -> IO (Either String (FilePath, Cluster))
+decodeFileWithPath :: FilePath -> IO (Either String Cluster)
 decodeFileWithPath fpath = do
     content <- Y.decodeFileEither fpath
     let ret = case content of
@@ -187,34 +184,12 @@ decodeFileWithPath fpath = do
 
     return $! parseClusters (fpath, ret)
   where
-    parseClusters :: (FilePath, Maybe Y.Value) -> Either String (FilePath, Cluster)
+    parseClusters :: (FilePath, Maybe Y.Value) -> Either String Cluster
     parseClusters (_, Nothing) = Left "Invalid YAML"
     parseClusters (path, Just x) = do
       cluster <- runReader (runExceptT $ parseYAML x) (takeBaseName path) :: Either String Cluster
 
-      return $! cluster `deepseq` (path, cluster)
-
--- Loads a directory of YAML files into a State. Strict. Does not recurse.
-loadStateFromDirectory :: FilePath -> IO State
-loadStateFromDirectory dir = do
-  yamls     <- find always (extension ==? ".yaml") dir
-  clusters'  <- mapM decodeFileWithPath yamls
-
-  let clusters'' = M.fromList $
-                    map (first (T.pack . takeBaseName)) $
-                    rights clusters' -- TODO: How to fail bad ones?
-
-  return State { _clusters = clusters'', _clusterCache = Nothing }
-
-analyze :: State -> State
-analyze state = state & clusterCache .~ newCache
-  where
-    newCache = Just $!! M.map (analyzeCluster state) (state ^. clusters)
-
--- Strict version of analyze
-analyze' :: State -> State
-analyze' state = let state' = analyze state in
-  state' `deepseq` state'
+      return $! cluster `deepseq` cluster
 
 analyzeCluster :: State -> Cluster -> M.HashMap Identifier2 Result
 analyzeCluster state = M.map (runEvalAll state)

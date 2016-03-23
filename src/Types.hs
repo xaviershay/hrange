@@ -84,6 +84,8 @@ type EvaluatedCluster = M.HashMap Identifier2 (S.HashSet Identifier2)
 -- TODO: newtype this and provide union/intersect implementations to abstract
 -- away Set type. Need benchmarks to work with first.
 type Result = S.HashSet Identifier2
+type CompressedResult = T.Text
+type Query = String -- TODO: Make Text
 type ClusterMap = M.HashMap Identifier2 Cluster -- TODO: Is PostEval right here?
 data State = State {
   _clusters :: ClusterMap,

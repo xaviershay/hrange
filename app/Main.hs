@@ -2,8 +2,7 @@
 
 module Main where
 
-import Lib
-import Types
+import Hrange
 import qualified Data.Text as T
 import Data.Text.Encoding (decodeUtf8', encodeUtf8Builder)
 import qualified Data.HashSet as S
@@ -25,7 +24,7 @@ main = do
     args  <- getArgs
     logInfo "Loading state"
 
-    (dt, state) <- withTiming $ loadStateFromDirectory (args !! 0)
+    (dt, (state, _)) <- withTiming $ loadStateFromDirectory (args !! 0)
     logInfo $ printf "Loaded state in %.4fs, Analyzing..." dt
 
     let port = 3000
@@ -88,7 +87,7 @@ decodeQuery req = do
 handleQuery2 :: State -> Request -> Either T.Text (T.Text, T.Text)
 handleQuery2 state req = do
     query  <- decodeQuery req
-    result <- either (Left . T.pack . show) Right (rangeEval state (T.unpack query))
+    result <- either (Left . T.pack . show) Right (expand state (T.unpack query))
 
     return (query, T.unlines . S.toList $ result)
 
@@ -99,7 +98,7 @@ handleQuery2 state req = do
 handleQuery :: State -> T.Text -> IO Response
 handleQuery state query = do
   -- CAN FAIL
-  return $ case rangeEval state (T.unpack query) of
+  return $ case expand state (T.unpack query) of
     Left x  -> responseBuilder (mkStatus 422 "Unprocessable Entity") [("Content-Type", "text/plain")] $ mconcat $ map copyByteString [BU.fromString $ show x]
     Right x -> success x
 
@@ -114,13 +113,13 @@ handleQuery state query = do
 --  let query = args !! 1
 --
 --  putStrLn "Eval"
---  --case rangeEval state query of
+--  --case expand state query of
 --  --  --Left x  -> [putStrLn $ show x]
 --  --  Right x -> mapM_ (putStrLn . show) . S.toList $ x
 --  withArgs [] $
 --    defaultMain [
 --      bgroup "eval"
---        [ bench query $ whnf (S.toList . fromRight . rangeEval state) query
+--        [ bench query $ whnf (S.toList . fromRight . expand state) query
 --        ]
 --      ]
   --print $ parseRange Nothing "/a/"

@@ -2,7 +2,8 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-import           Lib
+import           Hrange
+import           Lib (runEval, eval)
 import           Parser
 import           Types
 import           Yaml
@@ -63,7 +64,7 @@ listDirectories path = do
 
 loadRangeSpecs :: FilePath -> IO [(RangeSpec, Types.State)]
 loadRangeSpecs dir = do
-  state <- loadStateFromDirectory dir
+  (state, _) <- loadStateFromDirectory dir
   specs <- getDirectoryContents dir
   let specs' = map (\x -> joinPath [dir, x]) $ filter (isSuffixOf ".spec") specs
 
