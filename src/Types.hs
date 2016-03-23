@@ -84,9 +84,18 @@ type EvaluatedCluster = M.HashMap Identifier2 (S.HashSet Identifier2)
 -- TODO: newtype this and provide union/intersect implementations to abstract
 -- away Set type. Need benchmarks to work with first.
 type Result = S.HashSet Identifier2
-type CompressedResult = T.Text
+
+-- Builder method for making result sets from a list. Useful for testing and
+-- examples.
+makeResult :: [Identifier2] -> Result
+makeResult = S.fromList
+
 type Query = String -- TODO: Make Text
+type ClusterName = Identifier2
+type ClusterKey = Identifier2
 type ClusterMap = M.HashMap Identifier2 Cluster -- TODO: Is PostEval right here?
+-- |A state to run queries against. Usually constructed with
+-- 'loadStateFromDirectory'.
 data State = State {
   _clusters :: ClusterMap,
   _clusterCache :: Maybe ClusterCache

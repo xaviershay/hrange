@@ -156,7 +156,7 @@ eval (NumericRange (Identifier prefix) width low high) = do
 -- type system.
 eval (Regexp _) = return S.empty
 
-clusterLookupKey :: State -> Identifier2 -> Identifier2 -> [Expression]
+clusterLookupKey :: State -> ClusterName -> ClusterKey -> [Expression]
 clusterLookupKey state name "KEYS" =
   map toConst $ M.keys $ state
     ^. clusters
@@ -167,12 +167,6 @@ clusterLookupKey state name key =
     ^. clusters
     ^. at name . non M.empty
     ^. at key . non []
-
-addCluster :: T.Text -> Cluster -> State -> State
-addCluster name cluster = clusters %~ M.insert name cluster
-
-mkKey :: T.Text -> [Expression] -> Cluster
-mkKey = M.singleton
 
 -- Strict
 decodeFileWithPath :: FilePath -> IO (Either String Cluster)
