@@ -135,13 +135,14 @@ tests specs = testGroup ""
 
 instance Arbitrary Expression where
   arbitrary = frequency
-    [ (1, Const <$> (Identifier <$> printable))
+    [ (1, Const <$> printable)
     , (1, oneof
             [ Intersection  <$> arbitrary <*> arbitrary
             , Union         <$> arbitrary <*> arbitrary
             , Difference    <$> arbitrary <*> arbitrary
             , ClusterLookup <$> arbitrary <*> arbitrary
             , FunctionHas   <$> arbitrary <*> arbitrary
+            , FunctionMem   <$> arbitrary <*> arbitrary
             , FunctionClusters <$> arbitrary
             , fromJust . makeShowableRegex <$> scale ((`mod` 10) . abs) (listOf1 $ elements ['a'..'z'])
             , pure FunctionAllClusters

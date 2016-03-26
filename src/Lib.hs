@@ -20,7 +20,7 @@ import qualified Data.HashMap.Strict    as M
 import qualified Data.HashSet           as S
 import           Data.Monoid            ((<>))
 import qualified Data.Text              as T
-import Data.Maybe (catMaybes, fromJust)
+import Data.Maybe (mapMaybe, fromJust)
 import           Text.Printf            (printf)
 import           Control.Monad.Except
 import           Data.Either
@@ -42,9 +42,7 @@ mapFilterM p clusterMap = do
   return $ M.fromList matching
 
 eval :: Expression -> Eval Result
-eval (Const name)         = return $! S.singleton (toResult name)
-  where
-    toResult (Identifier x) = x
+eval (Const name)         = return $! S.singleton name
 
 eval (Union a b)        = S.union        <$> eval a <*> eval b
 
@@ -72,52 +70,36 @@ eval FunctionAllClusters = do
 -- TODO: Type checking for number of args
 eval (FunctionClusters names) = eval $ FunctionHas (mkConst "CLUSTER") names
 
+eval (FunctionMem clustersExpr namesExpr) = do
+  state       <- ask
+  clustersSet <- eval clustersExpr
+  nameSet     <- eval namesExpr
+
+  clusterKeys     <- mapM (\c -> eval (ClusterLookup (Const c) (Const "KEYS"))) (S.toList clustersSet)
+  keysWithResults <- zipWithM keyResults (S.toList clustersSet) (map S.toList clusterKeys)
+
+  let keysWithResults' = foldl M.union M.empty keysWithResults :: M.HashMap ClusterKey Result
+
+  let matching = M.filter (\rs -> any (`S.member` rs) (S.toList nameSet)) keysWithResults'
+
+  return . S.fromList . M.keys $ matching
+
+  where
+    keyResults :: ClusterName -> [ClusterKey] -> Eval (M.HashMap ClusterKey Result)
+    keyResults name ks = do
+      results <- mapM (eval . ClusterLookup (Const name) . Const) ks
+
+      return . M.fromList $ zip ks results
+
 -- TODO: Type checking for number of args
 eval (FunctionHas keysExpr namesExpr) = do
-  state <- ask
+  state   <- ask
   keySet  <- eval keysExpr
   nameSet <- eval namesExpr
 
   matching <- mapFilterM (hasNamesInKeys nameSet keySet) (state ^. clusters)
 
   return . S.fromList . M.keys $ matching
-
-  where
-    hasNamesInKeys :: S.HashSet Identifier2 -> S.HashSet Identifier2 -> (Identifier2, Cluster) -> Eval Bool
-    hasNamesInKeys names keys (clusterName, cluster) = do
-      hasAny <- mapM (hasNameInKeys cluster keys) $ S.toList names
-      return $ or hasAny
-
-      where
-        hasNameInKeys :: Cluster -> S.HashSet Identifier2 -> Identifier2 -> Eval Bool
-        hasNameInKeys cluster keys name = do
-          hasName <- mapM (hasNameInKey cluster name) $ S.toList keys
-          return $ or hasName
-
-        hasNameInKey :: Cluster -> Identifier2 -> Identifier2 -> Eval Bool
-        hasNameInKey cluster name key = do
-          names <- namesAtKey cluster key "bogus"
-          return $ S.member name names
-
-        namesAtKey :: Cluster -> Identifier2 -> Identifier2 -> Eval Result
-        namesAtKey cluster key clusterName = do
-          state <- ask
-
-          -- TODO This doesn't work, still gets cache misses
-          let cache = state ^. clusterCache . non M.empty
-          let clusterCache = cache ^. at clusterName :: Maybe EvaluatedCluster
-          let cacheMiss = do
-                            names <- mapM eval (exprsAtKey cluster key)
-                            return $ foldr S.union S.empty names
-
-          case clusterCache of
-            Just c -> return $ c ^. at key . non S.empty
-            Nothing -> cacheMiss
-
-          --maybe cacheMiss cacheHit clusterCache
-
-        exprsAtKey :: Cluster -> Identifier2 -> [Expression]
-        exprsAtKey cluster key = cluster ^. at key . non []
 
 eval (Product []) = return S.empty
 eval (Product xs) = do
@@ -156,6 +138,41 @@ eval (NumericRange (Identifier prefix) width low high) = do
 -- type system.
 eval (Regexp _) = return S.empty
 
+hasNamesInKeys :: S.HashSet ClusterName -> S.HashSet ClusterKey -> (ClusterName, Cluster) -> Eval Bool
+hasNamesInKeys names keys (clusterName, cluster) = do
+  hasAny <- mapM (hasNameInKeys cluster keys) $ S.toList names
+  return $ or hasAny
+
+  where
+    hasNameInKeys :: Cluster -> S.HashSet ClusterKey -> ClusterName -> Eval Bool
+    hasNameInKeys cluster keys name = do
+      hasName <- mapM (hasNameInKey cluster name) $ S.toList keys
+      return $ or hasName
+
+    hasNameInKey :: Cluster -> ClusterName -> ClusterKey -> Eval Bool
+    hasNameInKey cluster name key = do
+      names <- namesAtKey cluster key "bogus"
+      return $ S.member name names
+
+    namesAtKey :: Cluster -> ClusterName -> ClusterKey -> Eval Result
+    namesAtKey cluster key clusterName = do
+      state <- ask
+
+      -- TODO This doesn't work, still gets cache misses
+      let cache = state ^. clusterCache . non M.empty
+      let clusterCache = cache ^. at clusterName :: Maybe EvaluatedCluster
+      let cacheMiss = do
+                        names <- mapM eval (exprsAtKey cluster key)
+                        return $ foldr S.union S.empty names
+
+      case clusterCache of
+        Just c -> return $ c ^. at key . non S.empty
+        Nothing -> cacheMiss
+
+      --maybe cacheMiss cacheHit clusterCache
+
+    exprsAtKey :: Cluster -> Identifier2 -> [Expression]
+    exprsAtKey cluster key = cluster ^. at key . non []
 clusterLookupKey :: State -> ClusterName -> ClusterKey -> [Expression]
 clusterLookupKey state name "KEYS" =
   map toConst $ M.keys $ state
@@ -202,15 +219,13 @@ allEntries clusterMap = concatMap (\(name, cluster) ->
 buildIndex :: ClusterMap -> ReverseClusterMap
 buildIndex clusterMap =
   let entries = allEntries clusterMap in
-  let staticEntries = catMaybes $ map evalConst entries in
+  let staticEntries = mapMaybe evalConst entries in
 
   M.fromListWith S.union $ map (\(n, k, e) -> ((e, k), S.singleton n)) staticEntries
 
   where
-    evalConst (n, k, Const x) = Just (n, k, toResult x)
-    evalConst (n, k, x)       = Nothing -- TODO: Need to return these and index separately
-
-    toResult (Identifier x) = x
+    evalConst (n, k, Const x) = Just (n, k, x)
+    evalConst _               = Nothing -- TODO: Need to return these and index separately
 
 -- TODO: Don't expose ParserError?
 rangeEval :: State -> String -> Either ParseError Result

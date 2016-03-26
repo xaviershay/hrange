@@ -29,10 +29,10 @@ data PreEval
 data PostEval
 
 toConst :: T.Text -> Expression
-toConst k = Const (Identifier k)
+toConst k = Const k
 
 mkConst :: String -> Expression
-mkConst x = Const $ Identifier . T.pack $ x
+mkConst x = Const . T.pack $ x
 
 -- Regex doesn't implement Show, Eq, etc which is pretty annoying
 data ShowableRegex = ShowableRegex String R.Regex
@@ -62,11 +62,12 @@ data Expression =
   ClusterLookup Expression Expression |
   Regexp ShowableRegex |
   FunctionHas Expression Expression |
+  FunctionMem Expression Expression |
   FunctionClusters Expression |
   FunctionAllClusters |
   Product [Expression] |
   NumericRange (Identifier PreEval) Int Integer Integer |
-  Const (Identifier PreEval)
+  Const (Identifier2)
 
   deriving (Eq, Show, Generic)
 

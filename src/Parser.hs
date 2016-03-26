@@ -48,6 +48,7 @@ innerExprWithExcludes excludes =
   (   clusterLookup
   <|> localClusterLookup
   <|> defaultClusterLookup
+  <|> defaultMemLookup
   <|> clustersFunction
   <|> try parentheses
   <|> regex
@@ -84,9 +85,15 @@ localClusterLookup = do
 -- TODO: Make GROUPS customizable
 defaultClusterLookup = do
   first <- char '@'
-  keys  <- innerExprCluster
+  xs    <- innerExprCluster
 
-  return $ ClusterLookup (mkConst "GROUPS") keys
+  return $ ClusterLookup (mkConst "GROUPS") xs
+
+defaultMemLookup = do
+  first <- char '?'
+  xs    <- innerExprCluster
+
+  return $ FunctionMem (mkConst "GROUPS") xs
 
 keys = char ':' *> innerExpr
 
