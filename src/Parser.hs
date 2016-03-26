@@ -107,6 +107,7 @@ function = do
 
   where
     mkFunction "has" exprs = defineFunction "has" 2 (\xs -> FunctionHas (xs !! 0) (xs !! 1)) exprs
+    mkFunction "mem" exprs = defineFunction "mem" 2 (\xs -> FunctionMem (xs !! 0) (xs !! 1)) exprs
     mkFunction "clusters" exprs = defineFunction "clusters" 1 (\xs -> FunctionClusters (head xs)) exprs
     mkFunction "allclusters" exprs = defineFunction "allclusters" 0 (\_ -> FunctionAllClusters) exprs
     mkFunction name _ = fail $ printf "Unknown function: %s" (name :: String)
