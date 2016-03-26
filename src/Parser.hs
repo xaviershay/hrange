@@ -160,7 +160,7 @@ numericRange = do
     let prefix' = prefix ++ (take diff lower) in
     let lower'  = drop diff lower in
     -- TODO: Quickcheck to verify read here is safe
-    return $ NumericRange (Identifier . T.pack $ prefix') (length lower') (read lower') (read upper)
+    return $ NumericRange (T.pack prefix') (length lower') (read lower') (read upper)
   else
     fail "Second prefix in range must be common to first prefix"
 

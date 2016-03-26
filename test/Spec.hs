@@ -147,7 +147,7 @@ instance Arbitrary Expression where
             , fromJust . makeShowableRegex <$> scale ((`mod` 10) . abs) (listOf1 $ elements ['a'..'z'])
             , pure FunctionAllClusters
             , Product <$> scale ((`mod` 10) . abs) arbitrary
-            , NumericRange <$> (Identifier <$> printable) <*> elements [0..10] <*> smallInt <*> smallInt
+            , NumericRange <$> printable <*> elements [0..10] <*> smallInt <*> smallInt
             ])
     ]
 

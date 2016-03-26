@@ -161,7 +161,7 @@ loadStateFromDirectory dir = do
   let clusters'' = M.fromList $
                     map (first (T.pack . takeBaseName)) validClusters
 
-  let state = State { _clusters = clusters'', _clusterCache = Nothing }
+  let state = emptyState & clusters .~ clusters''
 
   return (state, invalidClusters)
 
@@ -178,10 +178,6 @@ analyze state = state & clusterCache .~ newCache
 analyze' :: State -> State
 analyze' state = let state' = analyze state in
   state' `deepseq` state'
-
--- |A minimal empty 'State'.
-emptyState :: State
-emptyState = State { _clusters = M.empty, _clusterCache = Nothing }
 
 -- |A key/results pair for purposes of easily programatically specifying a
 -- cluster. This is only used as an input type for certain builder functions -

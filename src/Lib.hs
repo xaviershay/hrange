@@ -14,7 +14,7 @@ import Yaml
 import Types
 import Parser
 import Control.Arrow (first)
-import           Control.Lens           ((^.), at, non, (%~), (.~), (&), set)
+import           Control.Lens           ((^.), at, non, (%~), (.~), (&))
 import           Control.Monad
 import           "mtl" Control.Monad.Identity
 import           "mtl" Control.Monad.Reader
@@ -124,7 +124,7 @@ eval (ClusterLookup namesExpr keysExpr) = do
   -- TODO: folding set union maybe not particularly efficient here?
   return $ foldr S.union S.empty results
 
-eval (NumericRange (Identifier prefix) width low high) = do
+eval (NumericRange prefix width low high) = do
   let nums = map (T.pack . printf ("%0" ++ show width ++ "i")) [low..high] :: [T.Text]
 
   return . S.fromList $ map (prefix <>) nums

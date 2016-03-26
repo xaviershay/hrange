@@ -5,7 +5,25 @@
 {-# LANGUAGE PackageImports    #-}
 
 module Types
-  ( module Types
+  ( Identifier2
+  , State
+  , Eval
+  , Query
+  , ClusterName
+  , ClusterKey
+  , ClusterMap
+  , mkConst
+  , toConst
+  , makeShowableRegex
+  , Expression(..)
+  , Cluster
+  , clusters
+  , Result
+  , ShowableRegex(..)
+  , clusterCache
+  , EvaluatedCluster
+  , emptyState
+  , makeResult
   ) where
 
 import           Control.Lens           hiding (Const)
@@ -18,15 +36,7 @@ import           GHC.Generics
 import           Control.Monad.Reader
 import           Control.DeepSeq (NFData, rnf)
 
--- TODO: Don't export Identifier, provide constructors.
-newtype Identifier a = Identifier T.Text deriving (Show, Eq, Generic)
-instance Hashable (Identifier a)
-instance NFData (Identifier a)
-
 type Identifier2 = T.Text
-
-data PreEval
-data PostEval
 
 toConst :: T.Text -> Expression
 toConst k = Const k
@@ -66,8 +76,8 @@ data Expression =
   FunctionClusters Expression |
   FunctionAllClusters |
   Product [Expression] |
-  NumericRange (Identifier PreEval) Int Integer Integer |
-  Const (Identifier2)
+  NumericRange Identifier2 Int Integer Integer |
+  Const Identifier2
 
   deriving (Eq, Show, Generic)
 
@@ -104,5 +114,9 @@ data State = State {
 
 makeLenses ''State
 instance NFData State
+
+-- |A minimal empty 'State'.
+emptyState :: State
+emptyState = State { _clusters = M.empty, _clusterCache = Nothing }
 
 type Eval a = ReaderT State Identity a
