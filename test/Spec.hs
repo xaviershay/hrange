@@ -97,7 +97,6 @@ main = do
 
   dirs <- maybe (return []) (\x -> listDirectories (x ++ "/spec/expand")) specPath
 
-  putStrLn $ show dirs
   specs <- mapM loadRangeSpecs dirs
   let specs' = concat specs
   defaultMain (tests specs')
