@@ -2,20 +2,21 @@
 
 module Main where
 
-import Hrange
-import qualified Data.Text as T
-import Data.Text.Encoding (decodeUtf8', encodeUtf8Builder)
-import qualified Data.HashSet as S
+import           Hrange
+
+import qualified Data.HashSet             as S
+import qualified Data.Text                as T
+import           Data.Text.Encoding       (decodeUtf8', encodeUtf8Builder)
 --import Criterion.Main
-import System.Environment (getArgs)
-import Network.Wai
-import Network.Wai.Handler.Warp
-import Network.HTTP.Types (status200, mkStatus)
-import Blaze.ByteString.Builder (copyByteString)
-import qualified Data.ByteString.UTF8 as BU
-import Data.Time.Clock (getCurrentTime, diffUTCTime)
-import Text.Printf (printf)
-import Control.Exception (evaluate)
+import           Blaze.ByteString.Builder (copyByteString)
+import           Control.Exception        (evaluate)
+import qualified Data.ByteString.UTF8     as BU
+import           Data.Time.Clock          (diffUTCTime, getCurrentTime)
+import           Network.HTTP.Types       (mkStatus, status200)
+import           Network.Wai
+import           Network.Wai.Handler.Warp
+import           System.Environment       (getArgs)
+import           Text.Printf              (printf)
 
 
 main :: IO ()
