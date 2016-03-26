@@ -1,11 +1,11 @@
-module Yaml
+module Hrange.Yaml
     ( parseYAML
     , decodeFileWithPath
     , ParserWithState
     ) where
 
-import           Parser
-import           Types
+import           Hrange.Parser
+import           Hrange.Types
 
 import           Control.DeepSeq      (deepseq)
 import           Control.Monad.Except

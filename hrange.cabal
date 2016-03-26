@@ -16,7 +16,10 @@ library
   ghc-options: -Wall
   hs-source-dirs:      src
   exposed-modules:     Hrange
-  other-modules:       Lib,Parser,Types,Yaml,Hrange.Evaluator
+  other-modules:       Hrange.Evaluator
+                     , Hrange.Parser
+                     , Hrange.Types
+                     , Hrange.Yaml
   build-depends:       base >= 4.7 && < 5
                      , text
                      , lens
@@ -66,7 +69,11 @@ test-suite hrange-internal-test
   type:                exitcode-stdio-1.0
   hs-source-dirs:      src,test/internal
   main-is:             Quickcheck.hs
-  other-modules:       Hrange,Hrange.Evaluator,Lib,Parser,Types,Yaml
+  other-modules:       Hrange
+                     , Hrange.Evaluator
+                     , Hrange.Parser
+                     , Hrange.Types
+                     , Hrange.Yaml
   build-depends:       base
                      , tasty
                      , tasty-hunit

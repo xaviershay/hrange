@@ -1,6 +1,6 @@
 import           Hrange
 import           Hrange.Evaluator
-import           Types
+import           Hrange.Types
 
 import           Data.Maybe            (fromJust)
 import qualified Data.Text             as T

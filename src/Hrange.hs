@@ -115,15 +115,15 @@ import           Control.Arrow        (first)
 import           Control.DeepSeq      (deepseq, ($!!))
 import           Control.Lens         ((&), (.~), (^.))
 import qualified Data.HashMap.Strict  as M
+import qualified Data.HashSet         as S
 import qualified Data.Text            as T
 import           System.FilePath      (takeBaseName)
 import           System.FilePath.Find (always, extension, find, (==?))
 
-import           Hrange.Evaluator     (eval, runEval)
-import           Lib                  (analyzeCluster)
-import           Parser               (ParseError, parseRange)
-import           Types
-import           Yaml                 (decodeFileWithPath)
+import           Hrange.Evaluator (eval, runEval)
+import           Hrange.Parser    (ParseError, parseRange)
+import           Hrange.Types
+import           Hrange.Yaml      (decodeFileWithPath)
 
 type Error = ParseError
 
@@ -175,7 +175,13 @@ loadStateFromDirectory dir = do
 analyze :: State -> State
 analyze state = state & clusterCache .~ newCache
   where
-    newCache = Just $!! M.map (analyzeCluster state) (state ^. clusters)
+    newCache = Just $!! M.map analyzeCluster (state ^. clusters)
+
+    analyzeCluster :: Cluster -> M.HashMap Identifier Result
+    analyzeCluster = M.map runEvalAll
+
+    runEvalAll :: [Expression] -> Result
+    runEvalAll = foldl S.union S.empty . map (runEval state . eval)
 
 -- |Strict version of 'analyze'.
 analyze' :: State -> State

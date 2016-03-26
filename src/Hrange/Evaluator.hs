@@ -5,7 +5,7 @@ module Hrange.Evaluator (
   eval
 ) where
 
-import           Types
+import           Hrange.Types
 
 import           Control.Lens           (at, non, (^.))
 import           Control.Monad

@@ -5,24 +5,23 @@
 -- enlightening.
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 
-module Parser
+module Hrange.Parser
     ( parseRange
     , ParseResult
     , ParseError
     ) where
 
-import Types
+import           Hrange.Types
 
-import qualified Data.Text as T
-import Data.List (transpose)
-import Data.Maybe (fromMaybe, isJust, fromJust)
-
-import Control.Applicative hiding (Const)
-import Control.Monad (guard)
+import           Control.Applicative hiding (Const)
+import           Control.Monad       (guard)
+import           Data.List           (transpose)
+import           Data.Maybe          (fromJust, fromMaybe, isJust)
+import qualified Data.Text           as T
 -- Hide a few names that are provided by Applicative.
-import Text.Parsec hiding (many, optional, (<|>))
-import Text.Parsec.Expr
-import Text.Printf (printf)
+import           Text.Parsec         hiding (many, optional, (<|>))
+import           Text.Parsec.Expr
+import           Text.Printf         (printf)
 
 type ParseResult = Either ParseError Expression
 
@@ -59,7 +58,7 @@ innerExprWithExcludes excludes =
   <|> try constantQ
   <|> try function
   <|> constantQuotes
-  <|> Parser.product excludes
+  <|> productExpr excludes
   ) <* spaces
 
 -- OUTER EXPRESSIONS
@@ -138,7 +137,7 @@ constantQuotes = mkConst <$> (string "\"" *> many (noneOf "\"") <* char '"')
 nothing = do
   return $ Product []
 
-product excludes = do
+productExpr excludes = do
   exprs <- many1 (try numericRange <|> try (identifier excludes) <|> productBraces)
   return $
     -- This conditional isn't strictly required, but makes reading parse trees

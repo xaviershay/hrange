@@ -5,7 +5,7 @@
 {-# LANGUAGE PackageImports    #-}
 
 -- TODO: These exports are a shit-show
-module Types
+module Hrange.Types
   ( Identifier
   , State
   , Eval
