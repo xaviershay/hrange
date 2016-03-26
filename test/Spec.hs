@@ -6,7 +6,6 @@ import           Hrange
 import           Lib (runEval, eval)
 import           Parser
 import           Types
-import           Yaml
 
 import           Control.Monad          (replicateM)
 import           Control.Monad.Except
@@ -31,23 +30,19 @@ import           Text.Parsec
 import qualified Text.Regex.TDFA        as R
 import           Text.Show.Pretty
 import System.Directory
-import Debug.Trace
 import System.FilePath.Posix (joinPath)
 import System.IO
 import Data.List
---import           Control.Lens           hiding (Const)
 
 data RangeSpecCase = RangeSpecCase {
   _query :: String,
   _expected :: Result
 } deriving (Show)
---makeLenses ''RangeSpecCase
 
 data RangeSpec = RangeSpec {
   _path  :: FilePath,
   _cases :: [RangeSpecCase]
 } deriving (Show)
---makeLenses ''RangeSpec
 
 listDirectories :: FilePath -> IO [FilePath]
 listDirectories path = do
@@ -77,10 +72,8 @@ doParse path handle = do
   contents <- hGetContents handle
 
   case parse rangeSpec path contents of
-    Left err -> fail $ "Invalid spec file: " ++ path
+    Left err    -> fail $ "Invalid spec file: " ++ path
     Right parse -> return $ RangeSpec { _path = path, _cases = parse }
-
-  --return $ parseSpec (name, contents)
 
 parseSpec :: (String, String) -> Either ParseError (String, [RangeSpecCase])
 parseSpec (name, input) = f p
