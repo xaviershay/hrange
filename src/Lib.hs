@@ -12,9 +12,7 @@ module Lib
 
 import Yaml
 import Types
-import Parser
-import Control.Arrow (first)
-import           Control.Lens           ((^.), at, non, (%~), (.~), (&))
+import           Control.Lens           ((^.), at, non)
 import           Control.Monad
 import           "mtl" Control.Monad.Identity
 import           "mtl" Control.Monad.Reader
@@ -22,15 +20,12 @@ import qualified Data.HashMap.Strict    as M
 import qualified Data.HashSet           as S
 import           Data.Monoid            ((<>))
 import qualified Data.Text              as T
-import Data.Maybe (mapMaybe, fromJust)
 import           Text.Printf            (printf)
 import           Control.Monad.Except
-import           Data.Either
 import qualified Data.Yaml              as Y
 import           System.FilePath        (takeBaseName)
-import           System.FilePath.Find   (find, (==?), always, extension)
 import qualified Text.Regex.TDFA        as R
-import Control.DeepSeq (deepseq, ($!!))
+import Control.DeepSeq (deepseq)
 
 -- Reducing duplication doesn't make sense for this suggestion
 {-# ANN module ("HLint: ignore Reduce duplication" :: String) #-}

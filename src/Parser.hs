@@ -1,5 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+
+-- Disable top level signature warning, since the parser types aren't that
+-- enlightening.
+{-# OPTIONS_GHC -fno-warn-missing-signatures #-}
+
 module Parser
     ( parseRange
     , ParseResult
@@ -19,12 +24,11 @@ import Text.Parsec hiding (many, optional, (<|>))
 import Text.Parsec.Expr
 import Text.Printf (printf)
 
-import qualified Text.Regex.TDFA as R
-
 type ParseResult = Either ParseError Expression
 
 parseRange :: Maybe Expression -> String -> ParseResult
 parseRange localCluster input = runParser rangeExpr localCluster input input
+
 
 rangeExpr = outerExpr <* eof
 
@@ -40,7 +44,7 @@ table = [ [binary "," Union AssocLeft]
         , [binary "-" Difference AssocLeft]
         ]
 
-binary name fun assoc = Infix (do{ string name; spaces; return fun }) assoc
+binary name fun assoc = Infix (do{ _ <- string name; spaces; return fun }) assoc
 
 innerExpr = innerExprWithExcludes ""
 innerExprCluster = innerExprWithExcludes ":"
@@ -62,14 +66,12 @@ innerExprWithExcludes excludes =
 
 parentheses = char '(' *> (try outerExpr <|> nothing) <* char ')'
 
-joiner t c  = t <$> innerExpr <* spaces <* char c <* spaces <*> outerExpr
-
 -- INNER EXPRESSIONS
 
 clusterLookup = do
-  first <- char '%'
+  _     <- char '%'
   names <- innerExprCluster
-  keys  <- optionMaybe keys
+  keys  <- optionMaybe keysExpr
 
   return $ ClusterLookup names (fromMaybe (mkConst "CLUSTER") keys)
 
@@ -77,25 +79,25 @@ localClusterLookup = do
   name <- getState
   guard $ isJust name
 
-  first <- char '$'
+  _     <- char '$'
   keys  <- innerExprCluster
 
   return $ ClusterLookup (fromJust name) keys
 
 -- TODO: Make GROUPS customizable
 defaultClusterLookup = do
-  first <- char '@'
-  xs    <- innerExprCluster
+  _  <- char '@'
+  xs <- innerExprCluster
 
   return $ ClusterLookup (mkConst "GROUPS") xs
 
 defaultMemLookup = do
-  first <- char '?'
-  xs    <- innerExprCluster
+  _  <- char '?'
+  xs <- innerExprCluster
 
   return $ FunctionMem (mkConst "GROUPS") xs
 
-keys = char ':' *> innerExpr
+keysExpr = char ':' *> innerExpr
 
 function = do
   name <- (many1 alphaNum) <* char '('
@@ -117,7 +119,7 @@ function = do
 
 clustersFunction = mkClusters <$> (char '*' *> innerExpr)
   where
-    mkClusters expr = FunctionClusters expr
+    mkClusters x = FunctionClusters x
 
 -- IDENTIFIERS
 
@@ -149,18 +151,18 @@ product excludes = do
 
 numericRange = do
   prefix  <- many letter
-  lower   <- many1 digit
+  bottom   <- many1 digit
   _       <- string ".."
   prefix2 <- many letter
-  upper   <- many1 digit
+  top   <- many1 digit
 
   let commonPrefix = commonSuffix [prefix, prefix2]
   if commonPrefix == prefix2 then
-    let diff    = length lower - length upper in
-    let prefix' = prefix ++ (take diff lower) in
-    let lower'  = drop diff lower in
+    let diff    = length bottom - length top in
+    let prefix' = prefix ++ (take diff bottom) in
+    let bottom'  = drop diff bottom in
     -- TODO: Quickcheck to verify read here is safe
-    return $ NumericRange (T.pack prefix') (length lower') (read lower') (read upper)
+    return $ NumericRange (T.pack prefix') (length bottom') (read bottom') (read top)
   else
     fail "Second prefix in range must be common to first prefix"
 

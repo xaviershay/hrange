@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PackageImports    #-}
 
+-- TODO: These exports are a shit-show
 module Types
   ( Identifier2
   , State
@@ -12,18 +13,18 @@ module Types
   , ClusterName
   , ClusterKey
   , ClusterMap
+  , Expression(..)
+  , Cluster
+  , Result
+  , ShowableRegex(..)
+  , EvaluatedCluster
+  , clusters
+  , clusterCache
+  , emptyState
+  , makeResult
   , mkConst
   , toConst
   , makeShowableRegex
-  , Expression(..)
-  , Cluster
-  , clusters
-  , Result
-  , ShowableRegex(..)
-  , clusterCache
-  , EvaluatedCluster
-  , emptyState
-  , makeResult
   ) where
 
 import           Control.Lens           hiding (Const)
@@ -88,7 +89,6 @@ instance NFData Expression
 -- buy us anything implementation wise. It's easier (and strictly more accurate
 -- to the source data) to store as a list.
 type Cluster = M.HashMap Identifier2 [Expression]
-type ReverseClusterMap = M.HashMap (Identifier2, Identifier2) (S.HashSet Identifier2)
 type ClusterCache = M.HashMap Identifier2 EvaluatedCluster
 type EvaluatedCluster = M.HashMap Identifier2 (S.HashSet Identifier2)
 
