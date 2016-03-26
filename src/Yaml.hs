@@ -1,19 +1,22 @@
 module Yaml
     ( parseYAML
+    , decodeFileWithPath
     , ParserWithState
     ) where
 
-import Types
-import Parser
-import qualified Data.Yaml              as Y
-import qualified Data.HashMap.Strict    as M
-import qualified Data.Text              as T
-import qualified Data.Vector            as V
+import           Parser
+import           Types
+
+import           Control.DeepSeq      (deepseq)
 import           Control.Monad.Except
 import           Control.Monad.Reader
-import           Data.Maybe (fromJust)
-import           Data.Scientific        (Scientific, isInteger,
-                                         toBoundedInteger)
+import qualified Data.HashMap.Strict  as M
+import           Data.Maybe           (fromJust)
+import           Data.Scientific      (Scientific, isInteger, toBoundedInteger)
+import qualified Data.Text            as T
+import qualified Data.Vector          as V
+import qualified Data.Yaml            as Y
+import           System.FilePath      (takeBaseName)
 
 type ParserWithState a = ExceptT String (Reader String) a
 
@@ -48,6 +51,23 @@ parseExpr f expr =
   case f expr of
     Left _  -> throwError $ "Invalid range expression: " ++ expr
     Right x -> return x
+
+-- Strict
+decodeFileWithPath :: FilePath -> IO (Either String Cluster)
+decodeFileWithPath fpath = do
+    content <- Y.decodeFileEither fpath
+    let ret = case content of
+                Left _ -> Nothing
+                Right x -> Just x
+
+    return $! parseClusters (fpath, ret)
+  where
+    parseClusters :: (FilePath, Maybe Y.Value) -> Either String Cluster
+    parseClusters (_, Nothing) = Left "Invalid YAML"
+    parseClusters (path, Just x) = do
+      cluster <- runReader (runExceptT $ parseYAML x) (takeBaseName path) :: Either String Cluster
+
+      return $! cluster `deepseq` cluster
 
 formatScientific :: Scientific -> String
 formatScientific x = if isInteger x then

@@ -111,16 +111,19 @@ module Hrange (
     , State
     ) where
 
-import Lib (runEval, eval, decodeFileWithPath, analyzeCluster)
-import Types
-import Parser (parseRange, ParseError)
-import Control.Lens           ((^.), (.~), (&))
-import           System.FilePath        (takeBaseName)
-import System.FilePath.Find   (find, (==?), always, extension)
-import Control.Arrow (first)
-import Control.DeepSeq (($!!), deepseq)
-import qualified Data.HashMap.Strict    as M
-import qualified Data.Text              as T
+import           Control.Arrow        (first)
+import           Control.DeepSeq      (deepseq, ($!!))
+import           Control.Lens         ((&), (.~), (^.))
+import qualified Data.HashMap.Strict  as M
+import qualified Data.Text            as T
+import           System.FilePath      (takeBaseName)
+import           System.FilePath.Find (always, extension, find, (==?))
+
+import           Hrange.Evaluator     (eval, runEval)
+import           Lib                  (analyzeCluster)
+import           Parser               (ParseError, parseRange)
+import           Types
+import           Yaml                 (decodeFileWithPath)
 
 type Error = ParseError
 

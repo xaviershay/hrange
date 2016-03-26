@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 import           Hrange
-import           Lib (runEval, eval)
+import           Hrange.Evaluator       (eval, runEval)
 import           Parser
 import           Types
 
@@ -14,25 +14,25 @@ import           Control.Monad.Reader
 import           Data.Either
 import qualified Data.HashMap.Strict    as M
 import qualified Data.HashSet           as S
+import           Data.List
 import           Data.Maybe
 import           Data.Scientific        (Scientific, isInteger,
                                          toBoundedInteger)
 import qualified Data.Text              as T
 import qualified Data.Vector            as V
 import qualified Data.Yaml              as Y
+import           System.Directory
 import           System.Environment     (lookupEnv)
 import           System.FilePath        (takeBaseName, takeDirectory)
 import           System.FilePath.Find
+import           System.FilePath.Posix  (joinPath)
+import           System.IO
 import           Test.Tasty
 import           Test.Tasty.HUnit
 import           Test.Tasty.QuickCheck
 import           Text.Parsec
 import qualified Text.Regex.TDFA        as R
 import           Text.Show.Pretty
-import System.Directory
-import System.FilePath.Posix (joinPath)
-import System.IO
-import Data.List
 
 data RangeSpecCase = RangeSpecCase {
   _query :: String,
