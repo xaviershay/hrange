@@ -3,11 +3,13 @@
 {-# LANGUAGE PackageImports    #-}
 
 module Lib
-    ( module Lib
+    ( eval
+    , runEval
+    , decodeFileWithPath
+    , analyzeCluster
     ) where
 
 
-import Debug.Trace
 import Yaml
 import Types
 import Parser
@@ -71,7 +73,6 @@ eval FunctionAllClusters = do
 eval (FunctionClusters names) = eval $ FunctionHas (mkConst "CLUSTER") names
 
 eval (FunctionMem clustersExpr namesExpr) = do
-  state       <- ask
   clustersSet <- eval clustersExpr
   nameSet     <- eval namesExpr
 
@@ -139,40 +140,40 @@ eval (NumericRange (Identifier prefix) width low high) = do
 eval (Regexp _) = return S.empty
 
 hasNamesInKeys :: S.HashSet ClusterName -> S.HashSet ClusterKey -> (ClusterName, Cluster) -> Eval Bool
-hasNamesInKeys names keys (clusterName, cluster) = do
+hasNamesInKeys names keys (_, cluster) = do
   hasAny <- mapM (hasNameInKeys cluster keys) $ S.toList names
   return $ or hasAny
 
-  where
-    hasNameInKeys :: Cluster -> S.HashSet ClusterKey -> ClusterName -> Eval Bool
-    hasNameInKeys cluster keys name = do
-      hasName <- mapM (hasNameInKey cluster name) $ S.toList keys
-      return $ or hasName
+hasNameInKeys :: Cluster -> S.HashSet ClusterKey -> ClusterName -> Eval Bool
+hasNameInKeys cluster keys name = do
+  hasName <- mapM (hasNameInKey cluster name) $ S.toList keys
+  return $ or hasName
 
-    hasNameInKey :: Cluster -> ClusterName -> ClusterKey -> Eval Bool
-    hasNameInKey cluster name key = do
-      names <- namesAtKey cluster key "bogus"
-      return $ S.member name names
+hasNameInKey :: Cluster -> ClusterName -> ClusterKey -> Eval Bool
+hasNameInKey c name key = do
+  names <- namesAtKey c key "bogus"
+  return $ S.member name names
 
-    namesAtKey :: Cluster -> ClusterName -> ClusterKey -> Eval Result
-    namesAtKey cluster key clusterName = do
-      state <- ask
+namesAtKey :: Cluster -> ClusterKey -> ClusterName -> Eval Result
+namesAtKey cluster key name = do
+  state <- ask
 
-      -- TODO This doesn't work, still gets cache misses
-      let cache = state ^. clusterCache . non M.empty
-      let clusterCache = cache ^. at clusterName :: Maybe EvaluatedCluster
-      let cacheMiss = do
-                        names <- mapM eval (exprsAtKey cluster key)
-                        return $ foldr S.union S.empty names
+  -- TODO This doesn't work, still gets cache misses
+  let cache = state ^. clusterCache . non M.empty
+  let maybeCache = cache ^. at name :: Maybe EvaluatedCluster
+  let cacheMiss = do
+                    vs <- mapM eval (exprsAtKey cluster key)
+                    return $ foldr S.union S.empty vs
 
-      case clusterCache of
-        Just c -> return $ c ^. at key . non S.empty
-        Nothing -> cacheMiss
+  case maybeCache of
+    Just c  -> return $ c ^. at key . non S.empty
+    Nothing -> cacheMiss
 
-      --maybe cacheMiss cacheHit clusterCache
+  --maybe cacheMiss cacheHit clusterCache
 
-    exprsAtKey :: Cluster -> Identifier2 -> [Expression]
-    exprsAtKey cluster key = cluster ^. at key . non []
+exprsAtKey :: Cluster -> Identifier2 -> [Expression]
+exprsAtKey c key = c ^. at key . non []
+
 clusterLookupKey :: State -> ClusterName -> ClusterKey -> [Expression]
 clusterLookupKey state name "KEYS" =
   map toConst $ M.keys $ state
@@ -207,29 +208,3 @@ analyzeCluster state = M.map (runEvalAll state)
 
 runEvalAll :: State -> [Expression] -> Result
 runEvalAll state = foldl S.union S.empty . map (runEval state . eval)
-
--- Flattens a cluster map, returning a tuple (name, key, expr) for every entry.
-allEntries :: ClusterMap -> [(Identifier2, Identifier2, Expression)]
-allEntries clusterMap = concatMap (\(name, cluster) ->
-                          concatMap (\(key, exprs) ->
-                            map (\expr -> (name, key, expr)) exprs)
-                          (M.toList cluster))
-                        (M.toList clusterMap)
-
-buildIndex :: ClusterMap -> ReverseClusterMap
-buildIndex clusterMap =
-  let entries = allEntries clusterMap in
-  let staticEntries = mapMaybe evalConst entries in
-
-  M.fromListWith S.union $ map (\(n, k, e) -> ((e, k), S.singleton n)) staticEntries
-
-  where
-    evalConst (n, k, Const x) = Just (n, k, x)
-    evalConst _               = Nothing -- TODO: Need to return these and index separately
-
--- TODO: Don't expose ParserError?
-rangeEval :: State -> String -> Either ParseError Result
-rangeEval state query = do
-  expression <- parseRange Nothing query
-
-  return $ runEval state (eval expression)
