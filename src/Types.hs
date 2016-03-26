@@ -6,7 +6,7 @@
 
 -- TODO: These exports are a shit-show
 module Types
-  ( Identifier2
+  ( Identifier
   , State
   , Eval
   , Query
@@ -37,7 +37,8 @@ import           GHC.Generics
 import           Control.Monad.Reader
 import           Control.DeepSeq (NFData, rnf)
 
-type Identifier2 = T.Text
+-- |Any arbitrary range string identifier.
+type Identifier = T.Text
 
 toConst :: T.Text -> Expression
 toConst k = Const k
@@ -77,8 +78,8 @@ data Expression =
   FunctionClusters Expression |
   FunctionAllClusters |
   Product [Expression] |
-  NumericRange Identifier2 Int Integer Integer |
-  Const Identifier2
+  NumericRange Identifier Int Integer Integer |
+  Const Identifier
 
   deriving (Eq, Show, Generic)
 
@@ -88,23 +89,23 @@ instance NFData Expression
 -- Cluster expressions should be unique (i.e. a set), but that doesn't really
 -- buy us anything implementation wise. It's easier (and strictly more accurate
 -- to the source data) to store as a list.
-type Cluster = M.HashMap Identifier2 [Expression]
-type ClusterCache = M.HashMap Identifier2 EvaluatedCluster
-type EvaluatedCluster = M.HashMap Identifier2 (S.HashSet Identifier2)
+type Cluster = M.HashMap Identifier [Expression]
+type ClusterCache = M.HashMap Identifier EvaluatedCluster
+type EvaluatedCluster = M.HashMap Identifier (S.HashSet Identifier)
 
 -- TODO: newtype this and provide union/intersect implementations to abstract
 -- away Set type. Need benchmarks to work with first.
-type Result = S.HashSet Identifier2
+type Result = S.HashSet Identifier
 
 -- Builder method for making result sets from a list. Useful for testing and
 -- examples.
-makeResult :: [Identifier2] -> Result
+makeResult :: [Identifier] -> Result
 makeResult = S.fromList
 
 type Query = String -- TODO: Make Text
-type ClusterName = Identifier2
-type ClusterKey = Identifier2
-type ClusterMap = M.HashMap Identifier2 Cluster -- TODO: Is PostEval right here?
+type ClusterName = Identifier
+type ClusterKey = Identifier
+type ClusterMap = M.HashMap Identifier Cluster
 -- |A state to run queries against. Usually constructed with
 -- 'loadStateFromDirectory'.
 data State = State {

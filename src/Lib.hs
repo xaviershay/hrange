@@ -33,7 +33,7 @@ import Control.DeepSeq (deepseq)
 runEval :: State -> Eval a -> a
 runEval state e = runIdentity (runReaderT e state)
 
-mapFilterM :: (Monad m) => ((Identifier2, Cluster) -> m Bool) -> ClusterMap -> m ClusterMap
+mapFilterM :: (Monad m) => ((Identifier, Cluster) -> m Bool) -> ClusterMap -> m ClusterMap
 mapFilterM p clusterMap = do
   matching <- filterM p (M.toList clusterMap)
   return $ M.fromList matching
@@ -101,7 +101,7 @@ eval (Product []) = return S.empty
 eval (Product xs) = do
   results <- mapM eval xs
 
-  let asList   = map S.toList results :: [[Identifier2]]
+  let asList   = map S.toList results :: [[Identifier]]
   let combined = map T.concat $ sequence asList :: [T.Text]
 
   return . S.fromList $ combined
@@ -166,7 +166,7 @@ namesAtKey cluster key name = do
 
   --maybe cacheMiss cacheHit clusterCache
 
-exprsAtKey :: Cluster -> Identifier2 -> [Expression]
+exprsAtKey :: Cluster -> Identifier -> [Expression]
 exprsAtKey c key = c ^. at key . non []
 
 clusterLookupKey :: State -> ClusterName -> ClusterKey -> [Expression]
@@ -198,7 +198,7 @@ decodeFileWithPath fpath = do
 
       return $! cluster `deepseq` cluster
 
-analyzeCluster :: State -> Cluster -> M.HashMap Identifier2 Result
+analyzeCluster :: State -> Cluster -> M.HashMap Identifier Result
 analyzeCluster state = M.map (runEvalAll state)
 
 runEvalAll :: State -> [Expression] -> Result

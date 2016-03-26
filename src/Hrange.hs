@@ -182,7 +182,7 @@ analyze' state = let state' = analyze state in
 -- |A key/results pair for purposes of easily programatically specifying a
 -- cluster. This is only used as an input type for certain builder functions -
 -- internally a different representation is used.
-type ClusterEntry = (ClusterKey, [Identifier2])
+type ClusterEntry = (ClusterKey, [Identifier])
 
 -- |Builder method for programatically creating a cluster and adding it to a
 -- state. This returned state will not be 'analyze'd.
