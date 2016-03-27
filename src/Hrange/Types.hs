@@ -1,8 +1,6 @@
 {-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE DeriveGeneric     #-}
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PackageImports    #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 -- TODO: These exports are a shit-show
 module Hrange.Types
@@ -18,6 +16,7 @@ module Hrange.Types
   , Result
   , ShowableRegex(..)
   , EvaluatedCluster
+  , RangeLog(..)
   , clusters
   , clusterCache
   , emptyState
@@ -35,6 +34,7 @@ import qualified Data.HashSet           as S
 import           Text.Regex.TDFA        as R
 import           GHC.Generics
 import           Control.Monad.Reader
+import           Control.Monad.Writer
 import           Control.DeepSeq (NFData, rnf)
 
 -- |Any arbitrary range string identifier.
@@ -120,4 +120,11 @@ instance NFData State
 emptyState :: State
 emptyState = State { _clusters = M.empty, _clusterCache = Nothing }
 
-type Eval a = ReaderT State Identity a
+type Eval a = WriterT [RangeLog] (ReaderT State Identity) a
+
+-- Allows results to be folded together without needing to unwrap them first.
+instance Monoid a => Monoid (Eval a) where
+  mempty      = return mempty
+  mappend a b = mappend <$> a <*> b
+
+data RangeLog = CacheHit Identifier | CacheMiss Identifier deriving (Show)

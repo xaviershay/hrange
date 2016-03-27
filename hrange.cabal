@@ -68,6 +68,7 @@ executable ergh
                      , hrange
                      , unordered-containers
                      , text
+                     , pretty-show
   default-language:    Haskell2010
 
 -- These tests may depend on internal functions and types. Useful for unit and

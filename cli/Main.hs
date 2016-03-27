@@ -7,6 +7,7 @@ import           Data.List          (sort)
 import qualified Data.Text          as T
 import           System.Environment (getArgs)
 import           System.Exit        (die)
+import           Text.Show.Pretty
 
 main :: IO ()
 main = do
@@ -20,7 +21,14 @@ main = do
     let query = args !! 1
 
     (state, _) <- loadStateFromDirectory stateDir
+    let state' = analyze state
 
-    case expand state query of
-      Left err      -> die $ "Invalid query: " ++ show err
-      Right results -> putStr . T.unpack . T.unlines . sort . S.toList $ results
+    putStrLn $ ppShow state'
+    putStrLn ""
+
+    case expandDebug state' query of
+      Left err             -> die $ "Invalid query: " ++ show err
+      Right (results, debug) -> do
+                                  putStrLn $ ppShow debug
+                                  putStrLn ""
+                                  putStr . T.unpack . T.unlines . sort . S.toList $ results

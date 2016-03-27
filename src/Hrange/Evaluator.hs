@@ -11,6 +11,7 @@ import           Control.Lens           (at, non, (^.))
 import           Control.Monad
 import           Control.Monad.Identity
 import           Control.Monad.Reader
+import           Control.Monad.Writer (tell, runWriterT)
 import qualified Data.HashMap.Strict    as M
 import qualified Data.HashSet           as S
 import           Data.Monoid            ((<>))
@@ -18,11 +19,13 @@ import qualified Data.Text              as T
 import           Text.Printf            (printf)
 import qualified Text.Regex.TDFA        as R
 
+import Debug.Trace
+
 -- Reducing duplication doesn't make sense for this suggestion
 {-# ANN module ("HLint: ignore Reduce duplication" :: String) #-}
 
-runEval :: State -> Eval a -> a
-runEval state e = runIdentity (runReaderT e state)
+runEval :: State -> Eval a -> (a, [RangeLog])
+runEval state e = runIdentity (runReaderT (runWriterT e) state)
 
 eval :: Expression -> Eval Result
 eval (Const name)         = return $! S.singleton name
@@ -94,15 +97,10 @@ eval (Product xs) = do
   return . S.fromList $ combined
 
 eval (ClusterLookup namesExpr keysExpr) = do
-  state   <- ask
   nameSet <- eval namesExpr
   keySet  <- eval keysExpr
 
-  results <- mapM eval $
-    foldMap (\name ->
-      foldMap (clusterLookupKey state name) keySet) nameSet
-
-  return $ foldr S.union S.empty results
+  foldMap (\name -> foldMap (clusterLookupKey name) keySet) nameSet
 
 eval (NumericRange prefix width low high) = do
   let nums = map (T.pack . printf ("%0" ++ show width ++ "i")) [low..high] :: [T.Text]
@@ -131,7 +129,7 @@ hasNameInKeys cluster keys name = do
 
 hasNameInKey :: Cluster -> ClusterName -> ClusterKey -> Eval Bool
 hasNameInKey c name key = do
-  names <- namesAtKey c key "bogus"
+  names <- namesAtKey c key "FAILFAIL"
   return $ S.member name names
 
 namesAtKey :: Cluster -> ClusterKey -> ClusterName -> Eval Result
@@ -146,22 +144,35 @@ namesAtKey cluster key name = do
                     return $ foldr S.union S.empty vs
 
   case maybeCache of
-    Just c  -> return $ c ^. at key . non S.empty
-    Nothing -> cacheMiss
+    Just c  -> trace "HIT" $ return $ c ^. at key . non S.empty
+    Nothing -> trace ("MISS: " ++ show name) cacheMiss
 
   --maybe cacheMiss cacheHit clusterCache
 
 exprsAtKey :: Cluster -> Identifier -> [Expression]
 exprsAtKey c key = c ^. at key . non []
 
-clusterLookupKey :: State -> ClusterName -> ClusterKey -> [Expression]
-clusterLookupKey state name "KEYS" =
-  map toConst $ M.keys $ state
-    ^. clusters
-    ^. at name . non M.empty
+clusterLookupKey :: ClusterName -> ClusterKey -> Eval Result
+clusterLookupKey name "KEYS" = do
+    state <- ask
 
-clusterLookupKey state name key =
-  state
-    ^. clusters
-    ^. at name . non M.empty
-    ^. at key . non []
+    return . S.fromList $ M.keys $ state
+      ^. clusters
+      ^. at name . non mempty
+
+clusterLookupKey name key = do
+    state <- ask
+
+    let pretty = "%" <> name <> ":" <> key
+    let cache = state ^. clusterCache . non mempty
+    let cacheMiss = do
+                      tell [CacheMiss pretty]
+                      foldMap eval $ state
+                        ^. clusters
+                        ^. at name . non mempty
+                        ^. at key . non []
+    let cacheHit = \c -> do
+                           tell [CacheHit pretty]
+                           return $ c ^. at key . non mempty
+
+    maybe cacheMiss cacheHit (cache ^. at name)

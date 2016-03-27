@@ -94,6 +94,7 @@ module Hrange (
     -- * Interacting
       compress
     , expand
+    , expandDebug
     -- * Loading
     , analyze
     , analyze'
@@ -139,6 +140,12 @@ expand :: State -> Query -> Either Error Result
 expand state query = do
   expression <- parseRange Nothing query
 
+  return . fst $ runEval state (eval expression)
+
+expandDebug :: State -> Query -> Either Error (Result, [RangeLog])
+expandDebug state query = do
+  expression <- parseRange Nothing query
+
   return $ runEval state (eval expression)
 
 -- |Normalizes a range result back into a query. This may not be a minimal
@@ -181,7 +188,7 @@ analyze state = state & clusterCache .~ newCache
     analyzeCluster = M.map runEvalAll
 
     runEvalAll :: [Expression] -> Result
-    runEvalAll = foldl S.union S.empty . map (runEval state . eval)
+    runEvalAll = foldl S.union S.empty . map (fst . runEval state . eval)
 
 -- |Strict version of 'analyze'.
 analyze' :: State -> State
