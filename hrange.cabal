@@ -26,6 +26,7 @@ library
                      , mtl
                      , parsec
                      , unordered-containers
+                     , containers
                      , hashable
                      , regex-tdfa
                      , yaml
@@ -102,6 +103,7 @@ test-suite hrange-internal-test
                      , scientific
                      , text
                      , unordered-containers
+                     , containers
                      , vector
                      , yaml
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N

@@ -11,7 +11,8 @@ import           Control.Lens           (at, non, (^.))
 import           Control.Monad
 import           Control.Monad.Identity
 import           Control.Monad.Reader
-import           Control.Monad.Writer (tell, runWriterT)
+import           Control.Monad.Writer   (runWriterT)
+import           Data.Foldable          (fold, toList)
 import qualified Data.HashMap.Strict    as M
 import qualified Data.HashSet           as S
 import           Data.Monoid            ((<>))
@@ -25,14 +26,16 @@ import Debug.Trace
 {-# ANN module ("HLint: ignore Reduce duplication" :: String) #-}
 
 runEval :: State -> Eval a -> (a, [RangeLog])
-runEval state e = runIdentity (runReaderT (runWriterT e) state)
+runEval state e = let (x, y) = runIdentity (runReaderT (runWriterT e) state) in
+                   (x, toList y)
 
 eval :: Expression -> Eval Result
-eval (Const name)         = return $! S.singleton name
 
-eval (Union a b)        = S.union        <$> eval a <*> eval b
+eval (Const name) = return $! S.singleton name
 
-eval (Intersection (Regexp _) (Regexp _)) = return S.empty
+eval (Union a b) = mappend <$> eval a <*> eval b
+
+eval (Intersection (Regexp _) (Regexp _)) = return mempty
 eval (Intersection (Regexp lhs) rhs) = eval (Intersection rhs (Regexp lhs))
 eval (Intersection a (Regexp (ShowableRegex _ rx))) = do
   lhs <- eval a
@@ -44,7 +47,7 @@ eval (Difference a (Regexp (ShowableRegex _ rx))) = do
   lhs <- eval a
   return $ S.filter (not . R.matchTest rx . T.unpack) lhs
 
-eval (Difference a b)   = S.difference   <$> eval a <*> eval b
+eval (Difference a b)   = S.difference <$> eval a <*> eval b
 
 eval FunctionAllClusters = do
   state <- ask
@@ -56,12 +59,12 @@ eval (FunctionMem clustersExpr namesExpr) = do
   clustersSet <- eval clustersExpr
   nameSet     <- eval namesExpr
 
-  clusterKeys     <- mapM (\c -> eval (ClusterLookup (Const c) (Const "KEYS"))) (S.toList clustersSet)
-  keysWithResults <- zipWithM keyResults (S.toList clustersSet) (map S.toList clusterKeys)
+  clusterKeys     <- mapM (\c -> eval (ClusterLookup (Const c) (Const "KEYS"))) (toList clustersSet)
+  keysWithResults <- zipWithM keyResults (toList clustersSet) (map toList clusterKeys)
 
-  let keysWithResults' = foldl M.union M.empty keysWithResults :: M.HashMap ClusterKey Result
+  let keysWithResults' = fold keysWithResults :: M.HashMap ClusterKey Result
 
-  let matching = M.filter (\rs -> any (`S.member` rs) (S.toList nameSet)) keysWithResults'
+  let matching = M.filter (\rs -> any (`S.member` rs) nameSet) keysWithResults'
 
   return . S.fromList . M.keys $ matching
 
@@ -87,14 +90,14 @@ eval (FunctionHas keysExpr namesExpr) = do
       matching <- filterM p (M.toList clusterMap)
       return $ M.fromList matching
 
-eval (Product []) = return S.empty
+eval (Product []) = return mempty
 eval (Product xs) = do
   results <- mapM eval xs
 
-  let asList   = map S.toList results :: [[Identifier]]
-  let combined = map T.concat $ sequence asList :: [T.Text]
+  let asList   = map toList results :: [[Identifier]]
+  let combined = map T.concat $ sequence asList :: [Identifier]
 
-  return . S.fromList $ combined
+  return . makeResult $ combined
 
 eval (ClusterLookup namesExpr keysExpr) = do
   nameSet <- eval namesExpr
@@ -103,7 +106,7 @@ eval (ClusterLookup namesExpr keysExpr) = do
   foldMap (\name -> foldMap (clusterLookupKey name) keySet) nameSet
 
 eval (NumericRange prefix width low high) = do
-  let nums = map (T.pack . printf ("%0" ++ show width ++ "i")) [low..high] :: [T.Text]
+  let nums = map (T.pack . printf ("%0" ++ show width ++ "i")) [low..high] :: [Identifier]
 
   return . S.fromList $ map (prefix <>) nums
 
@@ -115,17 +118,18 @@ eval (NumericRange prefix width low high) = do
 --
 -- If this turns out to be a good decision, I'll consider encoding it into the
 -- type system.
-eval (Regexp _) = return S.empty
+eval (Regexp _) = return mempty
+
+orM :: (Monad m, Foldable t) => (a -> m Bool) -> t a -> m Bool
+orM f xs = do
+  xs' <- mapM f (toList xs)
+  return $ or xs'
 
 hasNamesInKeys :: S.HashSet ClusterName -> S.HashSet ClusterKey -> (ClusterName, Cluster) -> Eval Bool
-hasNamesInKeys names keys (_, cluster) = do
-  hasAny <- mapM (hasNameInKeys cluster keys) $ S.toList names
-  return $ or hasAny
+hasNamesInKeys names keys (_, cluster) = orM (hasNameInKeys cluster keys) names
 
 hasNameInKeys :: Cluster -> S.HashSet ClusterKey -> ClusterName -> Eval Bool
-hasNameInKeys cluster keys name = do
-  hasName <- mapM (hasNameInKey cluster name) $ S.toList keys
-  return $ or hasName
+hasNameInKeys cluster keys name = orM (hasNameInKey cluster name) keys
 
 hasNameInKey :: Cluster -> ClusterName -> ClusterKey -> Eval Bool
 hasNameInKey c name key = do
@@ -137,15 +141,15 @@ namesAtKey cluster key name = do
   state <- ask
 
   -- TODO This doesn't work, still gets cache misses
-  let cache = state ^. clusterCache . non M.empty
+  let cache = state ^. clusterCache . non mempty
   let maybeCache = cache ^. at name :: Maybe EvaluatedCluster
   let cacheMiss = do
                     vs <- mapM eval (exprsAtKey cluster key)
-                    return $ foldr S.union S.empty vs
+                    return $ foldr S.union mempty vs
 
   case maybeCache of
-    Just c  -> trace "HIT" $ return $ c ^. at key . non S.empty
-    Nothing -> trace ("MISS: " ++ show name) cacheMiss
+    Just c  -> return $ c ^. at key . non mempty
+    Nothing -> cacheMiss
 
   --maybe cacheMiss cacheHit clusterCache
 
@@ -156,7 +160,7 @@ clusterLookupKey :: ClusterName -> ClusterKey -> Eval Result
 clusterLookupKey name "KEYS" = do
     state <- ask
 
-    return . S.fromList $ M.keys $ state
+    return . makeResult . M.keys $ state
       ^. clusters
       ^. at name . non mempty
 
@@ -166,13 +170,13 @@ clusterLookupKey name key = do
     let pretty = "%" <> name <> ":" <> key
     let cache = state ^. clusterCache . non mempty
     let cacheMiss = do
-                      tell [CacheMiss pretty]
+                      recordStat $ CacheMiss pretty
                       foldMap eval $ state
                         ^. clusters
                         ^. at name . non mempty
                         ^. at key . non []
     let cacheHit = \c -> do
-                           tell [CacheHit pretty]
+                           recordStat $ CacheHit pretty
                            return $ c ^. at key . non mempty
 
     maybe cacheMiss cacheHit (cache ^. at name)

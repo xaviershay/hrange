@@ -24,6 +24,7 @@ module Hrange.Types
   , mkConst
   , toConst
   , makeShowableRegex
+  , recordStat
   ) where
 
 import           Control.Lens           hiding (Const)
@@ -31,6 +32,7 @@ import           Data.Hashable
 import qualified Data.Text              as T
 import qualified Data.HashMap.Strict    as M
 import qualified Data.HashSet           as S
+import qualified Data.Sequence          as Seq
 import           Text.Regex.TDFA        as R
 import           GHC.Generics
 import           Control.Monad.Reader
@@ -120,7 +122,7 @@ instance NFData State
 emptyState :: State
 emptyState = State { _clusters = M.empty, _clusterCache = Nothing }
 
-type Eval a = WriterT [RangeLog] (ReaderT State Identity) a
+type Eval a = WriterT (Seq.Seq RangeLog) (ReaderT State Identity) a
 
 -- Allows results to be folded together without needing to unwrap them first.
 instance Monoid a => Monoid (Eval a) where
@@ -128,3 +130,7 @@ instance Monoid a => Monoid (Eval a) where
   mappend a b = mappend <$> a <*> b
 
 data RangeLog = CacheHit Identifier | CacheMiss Identifier deriving (Show)
+
+recordStat :: RangeLog -> Eval ()
+recordStat = tell . Seq.singleton
+
