@@ -43,10 +43,10 @@ import           Control.DeepSeq (NFData, rnf)
 type Identifier = T.Text
 
 toConst :: T.Text -> Expression
-toConst k = Const k
+toConst = Const
 
 mkConst :: String -> Expression
-mkConst x = Const . T.pack $ x
+mkConst = Const . T.pack
 
 -- Regex doesn't implement Show, Eq, etc which is pretty annoying
 data ShowableRegex = ShowableRegex String R.Regex

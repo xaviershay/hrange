@@ -32,7 +32,7 @@ parseKey :: (T.Text, Y.Value) ->
 parseKey (x, exprs) = do
   clusterName <- ask
   parsed <- parseExprs (parseExpr $ parseRange (Just . mkConst $ clusterName)) exprs
-  return $ (x, parsed)
+  return (x, parsed)
 
 parseExprs :: (String -> ParserWithState Expression) ->
               Y.Value ->

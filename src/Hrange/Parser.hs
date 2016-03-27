@@ -99,7 +99,7 @@ defaultMemLookup = do
 keysExpr = char ':' *> innerExpr
 
 function = do
-  name <- (many1 alphaNum) <* char '('
+  name  <- many1 alphaNum <* char '('
   exprs <- outerExpr `sepBy` char ';' <* char ')'
 
   mkFunction name exprs
@@ -107,8 +107,8 @@ function = do
   where
     mkFunction "has" exprs = defineFunction "has" 2 (\xs -> FunctionHas (xs !! 0) (xs !! 1)) exprs
     mkFunction "mem" exprs = defineFunction "mem" 2 (\xs -> FunctionMem (xs !! 0) (xs !! 1)) exprs
-    mkFunction "clusters" exprs = defineFunction "clusters" 1 (\xs -> FunctionClusters (head xs)) exprs
-    mkFunction "allclusters" exprs = defineFunction "allclusters" 0 (\_ -> FunctionAllClusters) exprs
+    mkFunction "clusters" exprs = defineFunction "clusters" 1 (FunctionClusters . head) exprs
+    mkFunction "allclusters" exprs = defineFunction "allclusters" 0 (const FunctionAllClusters) exprs
     mkFunction name _ = fail $ printf "Unknown function: %s" (name :: String)
 
     defineFunction name expected f exprs =
@@ -119,7 +119,7 @@ function = do
 
 clustersFunction = mkClusters <$> (char '*' *> innerExpr)
   where
-    mkClusters x = FunctionClusters x
+    mkClusters = FunctionClusters
 
 -- IDENTIFIERS
 
@@ -134,8 +134,7 @@ regex = do
 constantQ      = mkConst <$> (string "q(" *> many (noneOf ")") <* char ')')
 constantQuotes = mkConst <$> (string "\"" *> many (noneOf "\"") <* char '"')
 
-nothing = do
-  return $ Product []
+nothing = return $ Product []
 
 productExpr excludes = do
   exprs <- many1 (try numericRange <|> try (identifier excludes) <|> productBraces)
@@ -159,7 +158,7 @@ numericRange = do
   let commonPrefix = commonSuffix [prefix, prefix2]
   if commonPrefix == prefix2 then
     let diff    = length bottom - length top in
-    let prefix' = prefix ++ (take diff bottom) in
+    let prefix' = prefix ++ take diff bottom in
     let bottom'  = drop diff bottom in
     -- TODO: Quickcheck to verify read here is safe
     return $ NumericRange (T.pack prefix') (length bottom') (read bottom') (read top)
@@ -168,7 +167,7 @@ numericRange = do
 
 -- TODO: quick check and stuff
 commonSuffix :: [String] -> String
-commonSuffix xs = map head . takeWhile (\(c:cs) -> (length cs) == l && all (== c) cs) . transpose $ xs
+commonSuffix xs = map head . takeWhile (\(c:cs) -> length cs == l && all (== c) cs) . transpose $ xs
   where l = length xs - 1
 
 productBraces = char '{' *> (try outerExpr <|> nothing) <* char '}'
