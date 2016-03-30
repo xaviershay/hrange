@@ -4,7 +4,7 @@ module Main where
 
 import           Hrange
 
-import qualified Data.HashSet             as S
+import           Data.Foldable            (toList)
 import qualified Data.Text                as T
 import           Data.Text.Encoding       (decodeUtf8', encodeUtf8Builder)
 --import Criterion.Main
@@ -90,7 +90,7 @@ handleQuery2 state req = do
     query  <- decodeQuery req
     result <- either (Left . T.pack . show) Right (expand state (T.unpack query))
 
-    return (query, T.unlines . S.toList $ result)
+    return (query, T.unlines . toList $ result)
 
 --(Status, LogExtra, Text)
 -- SUCCESS: 200 (or Text)
@@ -105,7 +105,7 @@ handleQuery state query = do
 
   where
     success results =
-      responseBuilder status200 [("Content-Type", "text/plain")] $ mconcat $ map (copyByteString . BU.fromString . show) . S.toList $ results
+      responseBuilder status200 [("Content-Type", "text/plain")] $ mconcat $ map (copyByteString . BU.fromString . show) . toList $ results
 
 --main = do
 --  args  <- getArgs
@@ -116,11 +116,11 @@ handleQuery state query = do
 --  putStrLn "Eval"
 --  --case expand state query of
 --  --  --Left x  -> [putStrLn $ show x]
---  --  Right x -> mapM_ (putStrLn . show) . S.toList $ x
+--  --  Right x -> mapM_ (putStrLn . show) . toList $ x
 --  withArgs [] $
 --    defaultMain [
 --      bgroup "eval"
---        [ bench query $ whnf (S.toList . fromRight . expand state) query
+--        [ bench query $ whnf (toList . fromRight . expand state) query
 --        ]
 --      ]
   --print $ parseRange Nothing "/a/"

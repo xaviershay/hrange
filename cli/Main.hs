@@ -2,7 +2,7 @@ module Main where
 
 import           Hrange
 
-import qualified Data.HashSet       as S
+import           Data.Foldable      (toList)
 import           Data.List          (sort)
 import qualified Data.Text          as T
 import           System.Environment (getArgs)
@@ -31,4 +31,4 @@ main = do
       Right (results, debug) -> do
                                   putStrLn $ ppShow debug
                                   putStrLn ""
-                                  putStr . T.unpack . T.unlines . sort . S.toList $ results
+                                  putStr . T.unpack . T.unlines . sort . toList $ results
