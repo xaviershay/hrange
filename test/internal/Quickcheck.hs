@@ -31,7 +31,6 @@ instance Arbitrary Expression where
             , ClusterLookup <$> arbitrary <*> arbitrary
             , FunctionHas   <$> arbitrary <*> arbitrary
             , FunctionMem   <$> arbitrary <*> arbitrary
-            , FunctionClusters <$> arbitrary
             , fromJust . makeShowableRegex <$> scale ((`mod` 10) . abs) (listOf1 $ elements ['a'..'z'])
             , pure FunctionAllClusters
             , Product <$> scale ((`mod` 10) . abs) arbitrary

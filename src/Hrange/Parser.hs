@@ -105,11 +105,11 @@ function = do
   mkFunction name exprs
 
   where
-    mkFunction "has" exprs = defineFunction "has" 2 (\xs -> FunctionHas (xs !! 0) (xs !! 1)) exprs
-    mkFunction "mem" exprs = defineFunction "mem" 2 (\xs -> FunctionMem (xs !! 0) (xs !! 1)) exprs
-    mkFunction "clusters" exprs = defineFunction "clusters" 1 (FunctionClusters . head) exprs
-    mkFunction "allclusters" exprs = defineFunction "allclusters" 0 (const FunctionAllClusters) exprs
-    mkFunction name _ = fail $ printf "Unknown function: %s" (name :: String)
+    mkFunction "has"         = defineFunction "has"         2 (\xs -> FunctionHas (xs !! 0) (xs !! 1))
+    mkFunction "mem"         = defineFunction "mem"         2 (\xs -> FunctionMem (xs !! 0) (xs !! 1))
+    mkFunction "clusters"    = defineFunction "clusters"    1 (FunctionHas (mkConst "CLUSTER") . head)
+    mkFunction "allclusters" = defineFunction "allclusters" 0 (const FunctionAllClusters)
+    mkFunction name          = const . fail $ printf "Unknown function: %s" (name :: String)
 
     defineFunction name expected f exprs =
       if length exprs == expected then
@@ -117,9 +117,7 @@ function = do
       else
         fail $ printf "%s() expects %i arguments, got %i" (name :: String) expected (length exprs)
 
-clustersFunction = mkClusters <$> (char '*' *> innerExpr)
-  where
-    mkClusters = FunctionClusters
+clustersFunction = FunctionHas (mkConst "CLUSTER") <$> (char '*' *> innerExpr)
 
 -- IDENTIFIERS
 

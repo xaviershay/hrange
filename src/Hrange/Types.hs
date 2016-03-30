@@ -10,6 +10,7 @@ module Hrange.Types
   , Query
   , ClusterName
   , ClusterKey
+  , ClusterPair
   , ClusterMap
   , Expression(..)
   , Cluster
@@ -77,7 +78,6 @@ data Expression =
   Regexp ShowableRegex |
   FunctionHas Expression Expression |
   FunctionMem Expression Expression |
-  FunctionClusters Expression |
   FunctionAllClusters |
   Product [Expression] |
   NumericRange Identifier Int Integer Integer |
@@ -107,6 +107,7 @@ makeResult = S.fromList
 type Query = String -- TODO: Make Text
 type ClusterName = Identifier
 type ClusterKey = Identifier
+type ClusterPair = (ClusterName, ClusterKey)
 type ClusterMap = M.HashMap Identifier Cluster
 -- |A state to run queries against. Usually constructed with
 -- 'loadStateFromDirectory'.
@@ -133,4 +134,3 @@ data RangeLog = CacheHit Identifier | CacheMiss Identifier deriving (Show)
 
 recordStat :: RangeLog -> Eval ()
 recordStat = tell . Seq.singleton
-
