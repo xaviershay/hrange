@@ -14,7 +14,7 @@ import           Control.Monad.Extra    (anyM, concatMapM)
 import           Control.Monad.Identity
 import           Control.Monad.Reader
 import           Control.Monad.Writer   (runWriterT)
-import           Data.Foldable          (toList)
+import           Data.Foldable          (toList, fold)
 import qualified Data.HashMap.Strict    as M
 import qualified Data.HashSet           as S
 import           Data.Monoid            ((<>))
@@ -45,11 +45,11 @@ eval (Difference a b) = S.difference <$> eval a <*> eval b
 eval FunctionAllClusters = makeResult . M.keys . view clusters <$> ask
 
 eval (FunctionMem clustersExpr namesExpr) = do
-  clustersSet <- eval clustersExpr
-  nameSet     <- eval namesExpr
+  cs <- evalAsList clustersExpr
+  ns <- evalAsList namesExpr
 
-  candidates  <- concatMapM pairWithKeys (toList clustersSet)
-  matched     <- filterByMember nameSet candidates
+  candidates  <- concatMapM pairWithKeys cs
+  matched     <- filterByMember ns candidates
 
   makeResultM $ map extractKey matched
 
@@ -58,12 +58,12 @@ eval (FunctionMem clustersExpr namesExpr) = do
     pairWithKeys c = map ((,) c) . toList <$> clusterLookupKey c "KEYS"
 
 eval (FunctionHas keysExpr namesExpr) = do
-  state      <- ask
-  keySet     <- eval keysExpr
-  nameSet    <- eval namesExpr
+  state <- ask
+  ks    <- evalAsList keysExpr
+  ns    <- evalAsList namesExpr
 
-  candidates <- pure $ sequenceOf both (allClusterNames state, toList keySet)
-  matched    <- filterByMember nameSet candidates
+  candidates <- pure $ sequenceOf both (allClusterNames state, ks)
+  matched    <- filterByMember ns candidates
 
   makeResultM . map extractName $ matched
 
@@ -73,17 +73,17 @@ eval (FunctionHas keysExpr namesExpr) = do
 
 eval (Product []) = return mempty
 eval (Product xs) = do
-  results <- mapM (fmap toList . eval) xs
+  results <- mapM evalAsList xs
 
   let combined = map concat . sequence $ results
 
   makeResultM combined
 
 eval (ClusterLookup namesExpr keysExpr) = do
-  nameSet <- eval namesExpr
-  keySet  <- eval keysExpr
+  ns <- evalAsList namesExpr
+  ks <- evalAsList keysExpr
 
-  foldMap (\name -> foldMap (clusterLookupKey name) keySet) nameSet
+  fold [clusterLookupKey n k | n <- ns, k <- ks]
 
 eval (NumericRange prefix width low high) =
    makeResultM . map ((prefix <>) . leftpad width) $ [low..high]
@@ -97,6 +97,9 @@ eval (NumericRange prefix width low high) =
 -- If this turns out to be a good decision, I'll consider encoding it into the
 -- type system.
 eval (Regexp _) = return mempty
+
+evalAsList :: Expression -> Eval [Identifier]
+evalAsList = fmap toList . eval
 
 filterByMember :: Foldable t => t Identifier -> [ClusterPair] -> Eval [ClusterPair]
 filterByMember ns = filterM (\(c, k) -> anyM (inKey c k) (toList ns))
