@@ -15,9 +15,7 @@ module Hrange.Parser
 import           Hrange.Types
 
 import           Control.Applicative
-import           Control.Monad       (guard)
 import           Data.List           (transpose)
-import           Data.Maybe          (fromJust, fromMaybe, isJust)
 import qualified Data.Text           as T
 import           Text.Parsec         hiding (many, optional, (<|>))
 import           Text.Parsec.Expr
@@ -27,7 +25,6 @@ type ParseResult = Either ParseError Expression
 
 parseRange :: Maybe Expression -> T.Text -> ParseResult
 parseRange localCluster input = runParser rangeExpr localCluster (T.unpack input) input
-
 
 rangeExpr = outerExpr <* eof
 
@@ -67,36 +64,27 @@ parentheses = char '(' *> (try outerExpr <|> nothing) <* char ')'
 
 -- INNER EXPRESSIONS
 
-clusterLookup = do
-  _     <- char '%'
-  names <- innerExprCluster
-  keys  <- optionMaybe keysExpr
+-- TODO: Make GROUPS customizable
+defaultCluster = mkConst "GROUPS"
+defaultKey     = mkConst "CLUSTER"
 
-  return $ ClusterLookup names (fromMaybe (mkConst "CLUSTER") keys)
+clusterLookup = ClusterLookup
+                  <$> (char '%' *> innerExprCluster)
+                  <*> (keysExpr <|> pure defaultKey)
+  where
+    keysExpr = char ':' *> innerExpr
+
+defaultClusterLookup = functionShortcut '@' $ ClusterLookup defaultCluster
+defaultMemLookup     = functionShortcut '?' $ FunctionMem defaultCluster
 
 localClusterLookup = do
   name <- getState
-  guard $ isJust name
 
-  _     <- char '$'
-  keys  <- innerExprCluster
+  case name of
+    Nothing -> fail "no local cluster"
+    Just n  -> functionShortcut '$' $ ClusterLookup n
 
-  return $ ClusterLookup (fromJust name) keys
-
--- TODO: Make GROUPS customizable
-defaultClusterLookup = do
-  _  <- char '@'
-  xs <- innerExprCluster
-
-  return $ ClusterLookup (mkConst "GROUPS") xs
-
-defaultMemLookup = do
-  _  <- char '?'
-  xs <- innerExprCluster
-
-  return $ FunctionMem (mkConst "GROUPS") xs
-
-keysExpr = char ':' *> innerExpr
+functionShortcut c f = f <$> (char c *> innerExprCluster)
 
 function = do
   name  <- many1 alphaNum <* char '('
@@ -105,13 +93,13 @@ function = do
   mkFunction name exprs
 
   where
-    mkFunction "has"         = defineFunction "has"         2 (\xs -> FunctionHas (xs !! 0) (xs !! 1))
-    mkFunction "mem"         = defineFunction "mem"         2 (\xs -> FunctionMem (xs !! 0) (xs !! 1))
-    mkFunction "clusters"    = defineFunction "clusters"    1 (FunctionHas (mkConst "CLUSTER") . head)
-    mkFunction "allclusters" = defineFunction "allclusters" 0 (const FunctionAllClusters)
+    mkFunction "has"         = df "has"         2 (\xs -> FunctionHas (xs !! 0) (xs !! 1))
+    mkFunction "mem"         = df "mem"         2 (\xs -> FunctionMem (xs !! 0) (xs !! 1))
+    mkFunction "clusters"    = df "clusters"    1 (FunctionHas (mkConst "CLUSTER") . head)
+    mkFunction "allclusters" = df "allclusters" 0 (const FunctionAllClusters)
     mkFunction name          = const . fail $ printf "Unknown function: %s" (name :: String)
 
-    defineFunction name expected f exprs =
+    df name expected f exprs =
       if length exprs == expected then
         return $ f exprs
       else
@@ -148,15 +136,15 @@ productExpr excludes = do
 
 numericRange = do
   prefix  <- many letter
-  bottom   <- many1 digit
+  bottom  <- many1 digit
   _       <- string ".."
   prefix2 <- many letter
-  top   <- many1 digit
+  top     <- many1 digit
 
   if prefix2 == commonSuffix [prefix, prefix2] then
     let diff    = length bottom - length top in
     let prefix' = prefix ++ take diff bottom in
-    let bottom'  = drop diff bottom in
+    let bottom' = drop diff bottom in
     -- TODO: Quickcheck to verify read here is safe
     return $ NumericRange (T.pack prefix') (length bottom') (read bottom') (read top)
   else
