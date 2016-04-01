@@ -21,9 +21,6 @@ import           Data.Monoid            ((<>))
 
 import           Prelude                hiding (concat)
 
--- Reducing duplication doesn't make sense for this suggestion
-{-# ANN module ("HLint: ignore Reduce duplication" :: String) #-}
-
 runEval :: State -> Eval a -> (a, [RangeLog])
 runEval state e = let (x, y) = runIdentity (runReaderT (runWriterT e) state) in
                    (x, toList y)
@@ -83,7 +80,7 @@ eval (ClusterLookup namesExpr keysExpr) = do
   ns <- evalAsList namesExpr
   ks <- evalAsList keysExpr
 
-  fold [clusterLookupKey n k | n <- ns, k <- ks]
+  fold $ clusterLookupKey <$> ns <*> ks
 
 eval (NumericRange prefix width low high) =
    makeResultM . map ((prefix <>) . leftpad width) $ [low..high]
