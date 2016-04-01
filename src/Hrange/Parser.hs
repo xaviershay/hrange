@@ -13,20 +13,19 @@ module Hrange.Parser
 
 import           Hrange.Types
 
-import           Control.Applicative hiding (Const)
+import           Control.Applicative
 import           Control.Monad       (guard)
 import           Data.List           (transpose)
 import           Data.Maybe          (fromJust, fromMaybe, isJust)
 import qualified Data.Text           as T
--- Hide a few names that are provided by Applicative.
 import           Text.Parsec         hiding (many, optional, (<|>))
 import           Text.Parsec.Expr
 import           Text.Printf         (printf)
 
 type ParseResult = Either ParseError Expression
 
-parseRange :: Maybe Expression -> String -> ParseResult
-parseRange localCluster input = runParser rangeExpr localCluster input input
+parseRange :: Maybe Expression -> T.Text -> ParseResult
+parseRange localCluster input = runParser rangeExpr localCluster (T.unpack input) input
 
 
 rangeExpr = outerExpr <* eof

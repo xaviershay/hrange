@@ -104,7 +104,7 @@ type Result = S.HashSet Identifier
 makeResult :: [Identifier] -> Result
 makeResult = S.fromList
 
-type Query = String -- TODO: Make Text
+type Query = T.Text
 type ClusterName = Identifier
 type ClusterKey = Identifier
 type ClusterPair = (ClusterName, ClusterKey)

@@ -18,7 +18,7 @@ main = do
       _ -> die "Usage: ergh DIR QUERY"
 
     let stateDir = args !! 0
-    let query = args !! 1
+    let query = T.pack $ args !! 1
 
     (state, _) <- loadStateFromDirectory stateDir
     let state' = analyze state

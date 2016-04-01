@@ -21,7 +21,7 @@ import           Test.Tasty.HUnit
 import           Text.Parsec
 
 data RangeSpecCase = RangeSpecCase {
-  _query :: String,
+  _query :: T.Text,
   _expected :: Result
 } deriving (Show)
 
@@ -91,7 +91,7 @@ rangeSingleSpec = do
   spec <- many (comment <|> line)
   _    <- optionMaybe eol
 
-  return $ RangeSpecCase (fromJust expr) (S.fromList . map T.pack . catMaybes $ spec)
+  return $ RangeSpecCase (T.pack . fromJust $ expr) (S.fromList . map T.pack . catMaybes $ spec)
 
 rangeSpec = many rangeSingleSpec
 
@@ -104,7 +104,7 @@ rangeSpecs transform (spec, state) =
   testGroup (takeBaseName (_path spec)) $ map (specTest $ transform state) (_cases spec)
 
 specTest state specCase =
-  testCase ("Evaluating \"" ++ expr ++ "\"") $ expected @=? actual
+  testCase ("Evaluating \"" ++ T.unpack expr ++ "\"") $ expected @=? actual
   where
     expr   = _query specCase
     expected = Right $ _expected specCase

@@ -88,7 +88,7 @@ decodeQuery req = do
 handleQuery2 :: State -> Request -> Either T.Text (T.Text, T.Text)
 handleQuery2 state req = do
     query  <- decodeQuery req
-    result <- either (Left . T.pack . show) Right (expand state (T.unpack query))
+    result <- either (Left . T.pack . show) Right (expand state query)
 
     return (query, T.unlines . toList $ result)
 
@@ -99,7 +99,7 @@ handleQuery2 state req = do
 handleQuery :: State -> T.Text -> IO Response
 handleQuery state query = do
   -- CAN FAIL
-  return $ case expand state (T.unpack query) of
+  return $ case expand state query of
     Left x  -> responseBuilder (mkStatus 422 "Unprocessable Entity") [("Content-Type", "text/plain")] $ mconcat $ map copyByteString [BU.fromString $ show x]
     Right x -> success x
 

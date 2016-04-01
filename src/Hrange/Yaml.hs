@@ -12,6 +12,7 @@ import           Control.Monad.Except
 import           Control.Monad.Reader
 import qualified Data.HashMap.Strict  as M
 import           Data.Maybe           (fromJust)
+import           Data.Monoid          ((<>))
 import           Data.Scientific      (Scientific, isInteger, toBoundedInteger)
 import qualified Data.Text            as T
 import qualified Data.Vector          as V
@@ -34,22 +35,22 @@ parseKey (x, exprs) = do
   parsed <- parseExprs (parseExpr $ parseRange (Just . mkConst $ clusterName)) exprs
   return (x, parsed)
 
-parseExprs :: (String -> ParserWithState Expression) ->
+parseExprs :: (T.Text -> ParserWithState Expression) ->
               Y.Value ->
               ParserWithState [Expression]
 parseExprs f (Y.Array xs) = concat <$> mapM (parseExprs f) (V.toList xs)
-parseExprs f (Y.String x) = replicate 1 <$> f (T.unpack x)
+parseExprs f (Y.String x) = replicate 1 <$> f x
 parseExprs f (Y.Number x) = replicate 1 <$> f (formatScientific x)
-parseExprs f (Y.Bool x)   = replicate 1 <$> f (show x)
+parseExprs f (Y.Bool x)   = replicate 1 <$> f (T.pack . show $ x)
 parseExprs _ Y.Null       = return []
 parseExprs _ (Y.Object _) = throwError "Nested objects not allowed"
 
-parseExpr :: (String -> ParseResult) ->
-             String ->
+parseExpr :: (T.Text -> ParseResult) ->
+             T.Text ->
              ParserWithState Expression
 parseExpr f expr =
   case f expr of
-    Left _  -> throwError $ "Invalid range expression: " ++ expr
+    Left _  -> throwError $ "Invalid range expression: " <> T.unpack expr
     Right x -> return x
 
 -- Strict
@@ -69,8 +70,8 @@ decodeFileWithPath fpath = do
 
       return $! cluster `deepseq` cluster
 
-formatScientific :: Scientific -> String
-formatScientific x = if isInteger x then
+formatScientific :: Scientific -> T.Text
+formatScientific x = T.pack $ if isInteger x then
                        show $ fromJust (toBoundedInteger x :: Maybe Int)
                      else
                        show x
