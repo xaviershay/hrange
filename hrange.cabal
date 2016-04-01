@@ -82,7 +82,7 @@ test-suite hrange-internal-test
   ghc-options: -Wall -fno-warn-orphans
   type:                exitcode-stdio-1.0
   hs-source-dirs:      src,test/internal
-  main-is:             Quickcheck.hs
+  main-is:             Main.hs
   other-modules:       Hrange
                      , Hrange.Evaluator
                      , Hrange.Parser

@@ -9,6 +9,7 @@ module Hrange.Parser
     ( parseRange
     , ParseResult
     , ParseError
+    , commonSuffix
     ) where
 
 import           Hrange.Types
@@ -152,8 +153,7 @@ numericRange = do
   prefix2 <- many letter
   top   <- many1 digit
 
-  let commonPrefix = commonSuffix [prefix, prefix2]
-  if commonPrefix == prefix2 then
+  if prefix2 == commonSuffix [prefix, prefix2] then
     let diff    = length bottom - length top in
     let prefix' = prefix ++ take diff bottom in
     let bottom'  = drop diff bottom in
@@ -162,10 +162,15 @@ numericRange = do
   else
     fail "Second prefix in range must be common to first prefix"
 
--- TODO: quick check and stuff
 commonSuffix :: [String] -> String
-commonSuffix xs = map head . takeWhile (\(c:cs) -> length cs == l && all (== c) cs) . transpose $ xs
-  where l = length xs - 1
+commonSuffix xs =
+  reverse . map head . takeWhile charIsSame . transpose . map reverse $ xs
+  where
+    l = length xs - 1
+
+    charIsSame :: String -> Bool
+    charIsSame []     = False
+    charIsSame (c:cs) = length cs == l && all (== c) cs
 
 productBraces = char '{' *> (try outerExpr <|> nothing) <* char '}'
 
