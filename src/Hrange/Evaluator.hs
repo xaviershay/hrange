@@ -101,6 +101,8 @@ evalAsList = fmap toList . eval
 filterByMember :: Foldable t => t Identifier -> [ClusterPair] -> Eval [ClusterPair]
 filterByMember ns = filterM (\(c, k) -> anyM (inKey c k) (toList ns))
 
+-- Implementing this lint requires weird types and extensions
+{-# ANN clusterLookupKey ("HLint: ignore Redundant lambda" :: String) #-}
 clusterLookupKey :: ClusterName -> ClusterKey -> Eval Result
 clusterLookupKey name "KEYS" = do
   state <- ask

@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 
 module Hrange.Parser
@@ -49,7 +50,7 @@ expr = buildExpressionParser table innerExpr <?> "expression"
             , [binary "-" Difference AssocLeft]
             ]
 
-    binary name fun assoc = Infix (string name >> spaces >> return fun) assoc
+    binary name fun = Infix (string name >> spaces >> return fun)
 
 innerExpr :: RangeParser
 innerExpr = innerExprWithExcludes ""
@@ -103,8 +104,8 @@ function = do
   mkFunction name exprs
 
   where
-    mkFunction "has"         = df "has"         2 (\(ks:ns:[]) -> FunctionHas ks ns)
-    mkFunction "mem"         = df "mem"         2 (\(cs:ns:[]) -> FunctionMem cs ns)
+    mkFunction "has"         = df "has"         2 (\[ks, ns] -> FunctionHas ks ns)
+    mkFunction "mem"         = df "mem"         2 (\[cs, ns] -> FunctionMem cs ns)
     mkFunction "clusters"    = df "clusters"    1 (FunctionHas defaultKey . head)
     mkFunction "allclusters" = df "allclusters" 0 (const FunctionAllClusters)
     mkFunction name          = const . fail $ printf "Unknown function: %s" (name :: String)
@@ -138,8 +139,8 @@ productExpr excludes = unwrap
 
   where
     -- This unwrap isn't required, but makes reading parse trees much easier.
-    unwrap (x:[]) = x
-    unwrap xs     = Product xs
+    unwrap [x] = x
+    unwrap xs  = Product xs
 
     productBraces = char '{' *> (try outerExpr <|> nothing) <* char '}'
 

@@ -1,7 +1,7 @@
 import           Hrange
 import           Hrange.Evaluator
 import           Hrange.Types
-import           Hrange.Parser
+import           Hrange.Text
 
 import Data.List (isSuffixOf)
 import           Data.Maybe            (fromJust)
