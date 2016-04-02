@@ -1,24 +1,23 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 
 module Hrange.Parser
     ( parseRange
     , ParseResult
     , ParseError
-    , commonSuffix
     ) where
 
+import           Hrange.Text
 import           Hrange.Types
 
 import           Control.Applicative
 import           Control.Monad.Identity (Identity)
-import           Data.List              (transpose)
 import qualified Data.Text              as T
 import           Data.Text.Format
 import qualified Data.Text.Lazy         as TL
 import           Text.Parsec            hiding (many, optional, (<|>))
 import           Text.Parsec.Expr
 import           Text.Printf            (printf)
+import           Text.Read              (readMaybe)
 
 type RangeParser = ParsecT T.Text (Maybe Expression) Identity Expression
 type ParseResult = Either ParseError Expression
@@ -90,10 +89,8 @@ clusterLookup = ClusterLookup
     keysExpr = char ':' *> innerExpr
 
 localClusterLookup :: RangeParser
-localClusterLookup = do
-  name <- getState
-
-  maybe (fail "no local cluster") (functionShortcut '$' . ClusterLookup) name
+localClusterLookup = maybe (fail "no local cluster")
+  (functionShortcut '$' . ClusterLookup) =<< getState
 
 functionShortcut :: Char -> (Expression -> Expression) -> RangeParser
 functionShortcut c f = f <$> (char c *> innerExprCluster)
@@ -106,8 +103,8 @@ function = do
   mkFunction name exprs
 
   where
-    mkFunction "has"         = df "has"         2 (\xs -> FunctionHas (xs !! 0) (xs !! 1))
-    mkFunction "mem"         = df "mem"         2 (\xs -> FunctionMem (xs !! 0) (xs !! 1))
+    mkFunction "has"         = df "has"         2 (\(ks:ns:[]) -> FunctionHas ks ns)
+    mkFunction "mem"         = df "mem"         2 (\(cs:ns:[]) -> FunctionMem cs ns)
     mkFunction "clusters"    = df "clusters"    1 (FunctionHas defaultKey . head)
     mkFunction "allclusters" = df "allclusters" 0 (const FunctionAllClusters)
     mkFunction name          = const . fail $ printf "Unknown function: %s" (name :: String)
@@ -133,7 +130,7 @@ regex = do
   maybe (fail $ "Invalid regex: " ++ source) return (makeShowableRegex source)
 
 nothing :: RangeParser
-nothing = return $ Product []
+nothing = return . Product $ []
 
 productExpr :: String -> RangeParser
 productExpr excludes = unwrap
@@ -149,17 +146,20 @@ productExpr excludes = unwrap
 numericRange :: RangeParser
 numericRange = do
   prefix  <- many letter
-  bottom  <- many1 digit
+  bottom' <- many1 digit
   _       <- string ".."
   prefix2 <- many letter
   top     <- many1 digit
 
   if prefix2 == commonSuffix [prefix, prefix2] then
-    let diff    = length bottom - length top in
-    let prefix' = prefix ++ take diff bottom in
-    let bottom' = drop diff bottom in
-    -- TODO: Quickcheck to verify read here is safe
-    return $ NumericRange (T.pack prefix') (length bottom') (read bottom') (read top)
+    let diff    = length bottom' - length top in
+    let prefix' = prefix ++ take diff bottom' in
+    let bottom  = drop diff bottom' in
+    let result  = NumericRange (T.pack prefix') (length bottom)
+                    <$> readMaybe bottom
+                    <*> readMaybe top
+                    in
+    maybe (fail "Bottom or top were not ints") return result
   else
     fail "Second prefix in range must be common to first prefix"
 
@@ -167,20 +167,3 @@ identifier :: String -> RangeParser
 identifier excludes = mkConst <$> many1 (alphaNum <|> oneOf punctuation)
   where
     punctuation = stripChars excludes "-_:."
-
--- HELPER METHODS
-
-commonSuffix :: [String] -> String
-commonSuffix xs =
-  reverse . map head . takeWhile charIsSame . transpose . map reverse $ xs
-  where
-    l = length xs - 1
-
-    charIsSame :: String -> Bool
-    charIsSame []     = False
-    charIsSame (c:cs) = length cs == l && all (== c) cs
-
--- http://www.rosettacode.org/wiki/Strip_a_set_of_characters_from_a_string#Haskell
-stripChars :: String -> String -> String
-stripChars = filter . flip notElem
-
