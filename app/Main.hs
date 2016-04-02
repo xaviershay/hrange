@@ -3,78 +3,57 @@
 module Main where
 
 import           Hrange
+import           Logging
 
+import           Control.Exception        (evaluate)
 import           Data.Foldable            (toList)
 import qualified Data.Text                as T
 import           Data.Text.Encoding       (decodeUtf8', encodeUtf8Builder)
---import Criterion.Main
-import           Blaze.ByteString.Builder (copyByteString)
-import           Control.Exception        (evaluate)
-import qualified Data.ByteString.UTF8     as BU
-import           Data.Time.Clock          (diffUTCTime, getCurrentTime)
-import           Network.HTTP.Types       (mkStatus, status200)
+import           Network.HTTP.Types       (Status, mkStatus, status200)
 import           Network.Wai
 import           Network.Wai.Handler.Warp
 import           System.Environment       (getArgs)
-import           Text.Printf              (printf)
-
+import           System.Microtimer        (time)
 
 main :: IO ()
---main = print $ runEval $ eval state (Difference (GroupLookup (Const "hello") (Const "CLUSTER")) (Const "a"))
 main = do
     args  <- getArgs
-    logInfo "Loading state"
+    logInfo $ fromText "Loading state"
 
-    (dt, (state, _)) <- withTiming $ loadStateFromDirectory (args !! 0)
-    logInfo $ printf "Loaded state in %.4fs, Analyzing..." dt
+    (dt, (state, _)) <- time $ loadStateFromDirectory (args !! 0)
+    logInfo $ build "Loaded state in {}, Analyzing..." (Only $ fixed 4 dt)
 
     let port = 3000
 
-    (dt', analyzedState) <- withTiming $ evaluate (analyze' state)
+    (dt', analyzedState) <- time $ evaluate (analyze' state)
 
-    logInfo $ printf "Analyzed state in %.4fs" dt'
-    logInfo $ "Listening on port " ++ show port
+    logInfo $ build "Analyzed state in {}" (Only $ fixed 4 dt')
+    logInfo $ build "Listening on port {}" (Only port)
     run port (app analyzedState)
-
--- TODO: Support timeouts
--- TODO: Use microtimer package
-withTiming :: IO a -> IO (Float, a)
-withTiming action = do
-  start  <- getCurrentTime
-  result <- action
-  finish <- getCurrentTime
-
-  let dt = fromRational $ toRational $ diffUTCTime finish start :: Float
-
-  return (dt, result)
-
-buildResponse :: State -> Request -> (Response, Maybe T.Text)
-buildResponse state req =
-    let (status, extra, content) = case handleQuery2 state req of
-                                     Left err -> (mkStatus 422 "Unprocessable Entity", Nothing, err)
-                                     Right (query, results) -> (status200, Just query, results) in
-
-    -- Use evaluate at seq to force evaluation so that timing is accurate
-    -- TODO: Above comment is incorrect, timing is wrong
-    let resp = content `seq` responseBuilder status [("Content-Type", "text/plain")] $ encodeUtf8Builder content in
-
-    (resp, extra)
 
 app :: State -> Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived
 app state req respond = do
-    (dt, (resp, extra)) <- withTiming . evaluate $ buildResponse state req
+    let query = decodeQuery req
 
-    -- TODO: Extract logging elsewhere
-    let remote = show $ remoteHost req :: String
-    let msg = printf ("%s %.4f /%s \"%s\"" :: String) remote dt (T.unpack $ T.intercalate "/" $ pathInfo req) (T.replace "\"" "\\\"" (maybe "" id extra))
-    logInfo msg
-    respond resp
+    case query of
+      Left err ->
+        respond $ textResponse status422 err
+      Right x  -> do
+        (dt, results) <- time . evaluate $ expand' state x
 
-logInfo :: String -> IO ()
-logInfo msg = do
-    currentTime <- getCurrentTime
-    let level = "INFO" :: String
-    putStrLn $ printf ("%-5s [%s] %s" :: String) level (show currentTime) msg
+        case results of
+          Left err ->
+            respond $ textResponse status422 (T.pack . show $ err)
+          Right y -> do
+            logInfoReq req (build "{} \"{}\"" (fixed 4 dt, x))
+            respond $ textResponse status200 (T.unlines . toList $ y)
+
+textResponse :: Status -> T.Text -> Response
+textResponse status body =
+  responseBuilder status [("Content-Type", "text/plain")] (encodeUtf8Builder body)
+
+status422 :: Network.HTTP.Types.Status
+status422 = mkStatus 422 "Unprocessable Entity"
 
 decodeQuery :: Request -> Either T.Text T.Text
 decodeQuery req = do
@@ -84,59 +63,3 @@ decodeQuery req = do
   where
     f (x:_) = Right x
     f _     = Left "No query present"
-
-handleQuery2 :: State -> Request -> Either T.Text (T.Text, T.Text)
-handleQuery2 state req = do
-    query  <- decodeQuery req
-    result <- either (Left . T.pack . show) Right (expand state query)
-
-    return (query, T.unlines . toList $ result)
-
---(Status, LogExtra, Text)
--- SUCCESS: 200 (or Text)
--- Invalid unicode: 422 Text error
--- Invalid query: 422 Text error
-handleQuery :: State -> T.Text -> IO Response
-handleQuery state query = do
-  -- CAN FAIL
-  return $ case expand state query of
-    Left x  -> responseBuilder (mkStatus 422 "Unprocessable Entity") [("Content-Type", "text/plain")] $ mconcat $ map copyByteString [BU.fromString $ show x]
-    Right x -> success x
-
-  where
-    success results =
-      responseBuilder status200 [("Content-Type", "text/plain")] $ mconcat $ map (copyByteString . BU.fromString . show) . toList $ results
-
---main = do
---  args  <- getArgs
---  putStrLn "Loading state..."
---  state <- loadStateFromDirectory (args !! 0)
---  let query = args !! 1
---
---  putStrLn "Eval"
---  --case expand state query of
---  --  --Left x  -> [putStrLn $ show x]
---  --  Right x -> mapM_ (putStrLn . show) . toList $ x
---  withArgs [] $
---    defaultMain [
---      bgroup "eval"
---        [ bench query $ whnf (toList . fromRight . expand state) query
---        ]
---      ]
-  --print $ parseRange Nothing "/a/"
-  --print $ parseRange "%hello & there"
-  --print $ parseRange "%hello"
-  --print $ parseRange "%hello:KEYS"
-  --print $ parseRange "a"
-  --print $ parseRange "a,b,c"
-  --print $ parseRange "a{b,c}"
-  --print $ parseRange "a{b,c}d"
-  --print $ parseRange "{a,b}{c,d}"
-  --print $ parseRange "%{a,b}:{c,d}"
-  --print $ parseRange "%hello-there"
-  --print $ parseRange "hello-there"
-  --print $ parseRange "hello - there"
-  --print $ parseRange "a & /a/"
-  --print $ parseRange "{%abc,b}"
-
---fromRight (Right x) = x

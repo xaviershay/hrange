@@ -94,6 +94,7 @@ module Hrange (
     -- * Interacting
       compress
     , expand
+    , expand'
     , expandDebug
     -- * Loading
     , analyze
@@ -143,7 +144,14 @@ expand state query = do
 
   return . fst $ runEval state (eval expression)
 
--- |Same as @expand@, but contains extra debugging information about cache
+-- | Strict version of 'expand'.
+expand' :: State -> Query -> Either Error Result
+expand' state query =
+  case expand state query of
+    Left x  -> Left x
+    Right x -> x `deepseq` Right x
+
+-- |Same as 'expand', but contains extra debugging information about cache
 -- usage.
 expandDebug :: State -> Query -> Either Error (Result, [RangeLog])
 expandDebug state query = do
