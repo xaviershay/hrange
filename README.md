@@ -33,4 +33,5 @@ values needs to be re-parsed and evaluated on each query. Grange works around
 this by using a precomputed cache, but that takes many seconds to rebuild and
 must be done for any update. For hrange, I intend to store the fully parsed and
 normalized queries. I hope that this, combined with lazy evaluation, will allow
-for similar performance while not requiring a cache.
+for similar performance while not requiring a cache. **Update: nope, cache
+still necessary.**
