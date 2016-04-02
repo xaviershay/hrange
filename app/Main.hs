@@ -23,6 +23,9 @@ import           System.Timeout           (timeout)
 main :: IO ()
 main = do
     args  <- getArgs
+
+    _ <- spawnLogThread
+
     logInfo $ fromText "Loading state"
 
     (dt, (state, _)) <- time $ loadStateFromDirectory (head args)
