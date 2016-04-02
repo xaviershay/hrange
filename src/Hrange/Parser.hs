@@ -1,10 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 
--- Disable top level signature warning, since the parser types aren't that
--- enlightening.
-{-# OPTIONS_GHC -fno-warn-missing-signatures #-}
-
 module Hrange.Parser
     ( parseRange
     , ParseResult
@@ -15,35 +11,52 @@ module Hrange.Parser
 import           Hrange.Types
 
 import           Control.Applicative
+import Control.Monad.Identity (Identity)
 import           Data.List           (transpose)
 import qualified Data.Text           as T
 import           Text.Parsec         hiding (many, optional, (<|>))
 import           Text.Parsec.Expr
 import           Text.Printf         (printf)
 
+type RangeParser = ParsecT T.Text (Maybe Expression) Identity Expression
 type ParseResult = Either ParseError Expression
 
-parseRange :: Maybe Expression -> T.Text -> ParseResult
-parseRange localCluster input = runParser rangeExpr localCluster (T.unpack input) input
+-- TODO: Make defaultCluster customizable
+defaultCluster :: Expression
+defaultCluster = mkConst "GROUPS"
 
+defaultKey :: Expression
+defaultKey = mkConst "CLUSTER"
+
+parseRange :: Maybe Expression -> T.Text -> ParseResult
+parseRange localCluster input =
+  runParser rangeExpr localCluster (T.unpack input) input
+
+rangeExpr :: RangeParser
 rangeExpr = outerExpr <* eof
 
+outerExpr :: RangeParser
 outerExpr =
       try expr
   <|> innerExpr
 
-expr    = buildExpressionParser table innerExpr
-         <?> "expression"
+expr :: RangeParser
+expr = buildExpressionParser table innerExpr <?> "expression"
+  where
+    table = [ [binary "," Union AssocLeft]
+            , [binary "&" Intersection AssocLeft]
+            , [binary "-" Difference AssocLeft]
+            ]
 
-table = [ [binary "," Union AssocLeft]
-        , [binary "&" Intersection AssocLeft]
-        , [binary "-" Difference AssocLeft]
-        ]
+    binary name fun assoc = Infix (string name >> spaces >> return fun) assoc
 
-binary name fun assoc = Infix (do{ _ <- string name; spaces; return fun }) assoc
-
+innerExpr :: RangeParser
 innerExpr = innerExprWithExcludes ""
+
+innerExprCluster :: RangeParser
 innerExprCluster = innerExprWithExcludes ":"
+
+innerExprWithExcludes :: String -> RangeParser
 innerExprWithExcludes excludes =
   (   clusterLookup
   <|> localClusterLookup
@@ -58,34 +71,32 @@ innerExprWithExcludes excludes =
   <|> productExpr excludes
   ) <* spaces
 
--- OUTER EXPRESSIONS
-
-parentheses = char '(' *> (try outerExpr <|> nothing) <* char ')'
+  where
+    constantQ      = mkConst <$> (string "q(" *> many (noneOf ")")  <* char ')')
+    constantQuotes = mkConst <$> (string "\"" *> many (noneOf "\"") <* char '"')
+    parentheses    = char '(' *> (try outerExpr <|> nothing) <* char ')'
+    defaultClusterLookup = functionShortcut '@' $ ClusterLookup defaultCluster
+    defaultMemLookup     = functionShortcut '?' $ FunctionMem defaultCluster
 
 -- INNER EXPRESSIONS
 
--- TODO: Make GROUPS customizable
-defaultCluster = mkConst "GROUPS"
-defaultKey     = mkConst "CLUSTER"
-
+clusterLookup :: RangeParser
 clusterLookup = ClusterLookup
                   <$> (char '%' *> innerExprCluster)
                   <*> (keysExpr <|> pure defaultKey)
   where
     keysExpr = char ':' *> innerExpr
 
-defaultClusterLookup = functionShortcut '@' $ ClusterLookup defaultCluster
-defaultMemLookup     = functionShortcut '?' $ FunctionMem defaultCluster
-
+localClusterLookup :: RangeParser
 localClusterLookup = do
   name <- getState
 
-  case name of
-    Nothing -> fail "no local cluster"
-    Just n  -> functionShortcut '$' $ ClusterLookup n
+  maybe (fail "no local cluster") (functionShortcut '$' . ClusterLookup) name
 
+functionShortcut :: Char -> (Expression -> Expression) -> RangeParser
 functionShortcut c f = f <$> (char c *> innerExprCluster)
 
+function :: RangeParser
 function = do
   name  <- many1 alphaNum <* char '('
   exprs <- outerExpr `sepBy` char ';' <* char ')'
@@ -95,7 +106,7 @@ function = do
   where
     mkFunction "has"         = df "has"         2 (\xs -> FunctionHas (xs !! 0) (xs !! 1))
     mkFunction "mem"         = df "mem"         2 (\xs -> FunctionMem (xs !! 0) (xs !! 1))
-    mkFunction "clusters"    = df "clusters"    1 (FunctionHas (mkConst "CLUSTER") . head)
+    mkFunction "clusters"    = df "clusters"    1 (FunctionHas defaultKey . head)
     mkFunction "allclusters" = df "allclusters" 0 (const FunctionAllClusters)
     mkFunction name          = const . fail $ printf "Unknown function: %s" (name :: String)
 
@@ -105,11 +116,13 @@ function = do
       else
         fail $ printf "%s() expects %i arguments, got %i" (name :: String) expected (length exprs)
 
-clustersFunction = FunctionHas (mkConst "CLUSTER") <$> (char '*' *> innerExpr)
+clustersFunction :: RangeParser
+clustersFunction = FunctionHas defaultKey <$> (char '*' *> innerExpr)
 
 -- IDENTIFIERS
 
 -- TODO: Allow escaping?
+regex :: RangeParser
 regex = do
   source <- char '/' *> many (noneOf "/") <* char '/'
 
@@ -117,11 +130,10 @@ regex = do
     Just rx -> return rx
     Nothing -> fail ("Invalid regex: " ++ source)
 
-constantQ      = mkConst <$> (string "q(" *> many (noneOf ")") <* char ')')
-constantQuotes = mkConst <$> (string "\"" *> many (noneOf "\"") <* char '"')
-
+nothing :: RangeParser
 nothing = return $ Product []
 
+productExpr :: String -> RangeParser
 productExpr excludes = do
   exprs <- many1 (try numericRange <|> try (identifier excludes) <|> productBraces)
   return $
@@ -134,6 +146,10 @@ productExpr excludes = do
     else
       Product exprs
 
+  where
+    productBraces = char '{' *> (try outerExpr <|> nothing) <* char '}'
+
+numericRange :: RangeParser
 numericRange = do
   prefix  <- many letter
   bottom  <- many1 digit
@@ -150,6 +166,13 @@ numericRange = do
   else
     fail "Second prefix in range must be common to first prefix"
 
+identifier :: String -> RangeParser
+identifier excludes = mkConst <$> many1 (alphaNum <|> oneOf punctuation)
+  where
+    punctuation = stripChars excludes "-_:."
+
+-- HELPER METHODS
+
 commonSuffix :: [String] -> String
 commonSuffix xs =
   reverse . map head . takeWhile charIsSame . transpose . map reverse $ xs
@@ -160,13 +183,7 @@ commonSuffix xs =
     charIsSame []     = False
     charIsSame (c:cs) = length cs == l && all (== c) cs
 
-productBraces = char '{' *> (try outerExpr <|> nothing) <* char '}'
-
 -- http://www.rosettacode.org/wiki/Strip_a_set_of_characters_from_a_string#Haskell
 stripChars :: String -> String -> String
 stripChars = filter . flip notElem
 
--- TODO: More chars here maybe
-identifier excludes = mkConst <$> many1 (alphaNum <|> oneOf punctuation)
-  where
-    punctuation = stripChars excludes "-_:."
