@@ -11,12 +11,14 @@ module Hrange.Parser
 import           Hrange.Types
 
 import           Control.Applicative
-import Control.Monad.Identity (Identity)
-import           Data.List           (transpose)
-import qualified Data.Text           as T
-import           Text.Parsec         hiding (many, optional, (<|>))
+import           Control.Monad.Identity (Identity)
+import           Data.List              (transpose)
+import qualified Data.Text              as T
+import           Data.Text.Format
+import qualified Data.Text.Lazy         as TL
+import           Text.Parsec            hiding (many, optional, (<|>))
 import           Text.Parsec.Expr
-import           Text.Printf         (printf)
+import           Text.Printf            (printf)
 
 type RangeParser = ParsecT T.Text (Maybe Expression) Identity Expression
 type ParseResult = Either ParseError Expression
@@ -110,11 +112,13 @@ function = do
     mkFunction "allclusters" = df "allclusters" 0 (const FunctionAllClusters)
     mkFunction name          = const . fail $ printf "Unknown function: %s" (name :: String)
 
+    df :: (Foldable t, Monad m) => String -> Int -> (t a -> r) -> t a -> m r
     df name expected f exprs =
       if length exprs == expected then
-        return $ f exprs
+        return . f $ exprs
       else
-        fail $ printf "%s() expects %i arguments, got %i" (name :: String) expected (length exprs)
+        fail . TL.unpack $ format "{}() expects {} arguments, got {}"
+                             (name, expected, length exprs)
 
 clustersFunction :: RangeParser
 clustersFunction = FunctionHas defaultKey <$> (char '*' *> innerExpr)
@@ -126,27 +130,20 @@ regex :: RangeParser
 regex = do
   source <- char '/' *> many (noneOf "/") <* char '/'
 
-  case makeShowableRegex source of
-    Just rx -> return rx
-    Nothing -> fail ("Invalid regex: " ++ source)
+  maybe (fail $ "Invalid regex: " ++ source) return (makeShowableRegex source)
 
 nothing :: RangeParser
 nothing = return $ Product []
 
 productExpr :: String -> RangeParser
-productExpr excludes = do
-  exprs <- many1 (try numericRange <|> try (identifier excludes) <|> productBraces)
-  return $
-    -- This conditional isn't strictly required, but makes reading parse trees
-    -- much easier.  Potentially consider moving optimizations into another
-    -- parse, though I'm not sure what other optimization would be useful
-    -- (reorderings?)
-    if Prelude.length exprs == 1 then
-      Prelude.head exprs
-    else
-      Product exprs
+productExpr excludes = unwrap
+  <$> many1 (try numericRange <|> try (identifier excludes) <|> productBraces)
 
   where
+    -- This unwrap isn't required, but makes reading parse trees much easier.
+    unwrap (x:[]) = x
+    unwrap xs     = Product xs
+
     productBraces = char '{' *> (try outerExpr <|> nothing) <* char '}'
 
 numericRange :: RangeParser
