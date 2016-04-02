@@ -7,20 +7,25 @@ import           Logging
 
 import           Control.Exception        (evaluate)
 import           Data.Foldable            (toList)
+import           Data.Maybe               (fromMaybe)
 import qualified Data.Text                as T
-import           Data.Text.Encoding       (decodeUtf8', encodeUtf8Builder)
-import           Network.HTTP.Types       (Status, mkStatus, status200)
+import           Data.Text.Encoding       (decodeUtf8', decodeUtf8With,
+                                           encodeUtf8Builder)
+import           Data.Text.Encoding.Error (lenientDecode)
+import           Network.HTTP.Types       (Status, mkStatus, status200,
+                                           statusCode)
 import           Network.Wai
 import           Network.Wai.Handler.Warp
 import           System.Environment       (getArgs)
 import           System.Microtimer        (time)
+import           System.Timeout           (timeout)
 
 main :: IO ()
 main = do
     args  <- getArgs
     logInfo $ fromText "Loading state"
 
-    (dt, (state, _)) <- time $ loadStateFromDirectory (args !! 0)
+    (dt, (state, _)) <- time $ loadStateFromDirectory (head args)
     logInfo $ build "Loaded state in {}, Analyzing..." (Only $ fixed 4 dt)
 
     let port = 3000
@@ -33,20 +38,45 @@ main = do
 
 app :: State -> Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived
 app state req respond = do
-    let query = decodeQuery req
+    (dt, response) <- withTimeoutResponse defaultTimeout $
+                      withValidQuery req $
+                      rangeResponse state
 
-    case query of
-      Left err ->
-        respond $ textResponse status422 err
-      Right x  -> do
-        (dt, results) <- time . evaluate $ expand' state x
+    let rawQuery = T.drop 1 . decodeUtf8With lenientDecode $ rawQueryString req
 
-        case results of
-          Left err ->
-            respond $ textResponse status422 (T.pack . show $ err)
-          Right y -> do
-            logInfoReq req (build "{} \"{}\"" (fixed 4 dt, x))
-            respond $ textResponse status200 (T.unlines . toList $ y)
+    logInfoReq req $ build "{} {} \"{}\""
+      (fixed 4 dt, responseCode response, rawQuery)
+
+    respond response
+
+defaultTimeout :: Int
+defaultTimeout = 300000
+
+withTimeoutResponse :: Int -> Response -> IO (Double, Response)
+withTimeoutResponse t f = do
+  (dt, maybeResponse) <- time . timeout t . evaluate $ f
+
+  let timeoutResponse = textResponse status422 "Query exceeded time limit"
+  let response = fromMaybe timeoutResponse maybeResponse
+
+  return (dt, response)
+
+withValidQuery :: Request -> (T.Text -> Response) -> Response
+withValidQuery req f =
+  either
+    (textResponse status422)
+    f
+    (decodeQuery req)
+
+rangeResponse :: State -> Query -> Response
+rangeResponse state q =
+  either
+    (textResponse status422 . T.pack . show)
+    (textResponse status200 . T.unlines . toList)
+    (expand' state q)
+
+responseCode :: Response -> Int
+responseCode = statusCode . responseStatus
 
 textResponse :: Status -> T.Text -> Response
 textResponse status body =
@@ -58,7 +88,7 @@ status422 = mkStatus 422 "Unprocessable Entity"
 decodeQuery :: Request -> Either T.Text T.Text
 decodeQuery req = do
   query <- f (queryString req)
-  either (Left . T.pack . show) Right (decodeUtf8' $ fst $ query)
+  either (Left . T.pack . show) Right (decodeUtf8' . fst $ query)
 
   where
     f (x:_) = Right x
