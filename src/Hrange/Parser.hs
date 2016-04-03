@@ -68,7 +68,7 @@ innerExprWithExcludes excludes =
   <|> try parentheses
   <|> regex
   <|> try constantQ
-  <|> try function
+  <|> function
   <|> constantQuotes
   <|> productExpr excludes
   ) <* spaces
@@ -98,7 +98,7 @@ functionShortcut c f = f <$> (char c *> innerExprCluster)
 
 function :: RangeParser
 function = do
-  name  <- many1 alphaNum <* char '('
+  name  <- try (many1 alphaNum <* char '(')
   exprs <- outerExpr `sepBy` char ';' <* char ')'
 
   mkFunction name exprs

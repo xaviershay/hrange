@@ -7,14 +7,15 @@
 
 import           Hrange
 
-import qualified Data.HashSet           as S
+import qualified Data.HashSet          as S
 import           Data.List
 import           Data.Maybe
-import qualified Data.Text              as T
+import           Data.Monoid           ((<>))
+import qualified Data.Text             as T
 import           System.Directory
-import           System.Environment     (lookupEnv)
-import           System.FilePath        (takeBaseName)
-import           System.FilePath.Posix  (joinPath)
+import           System.Environment    (lookupEnv)
+import           System.FilePath       (takeBaseName)
+import           System.FilePath.Posix (joinPath)
 import           System.IO
 import           Test.Tasty
 import           Test.Tasty.HUnit
@@ -98,7 +99,18 @@ rangeSpec = many rangeSingleSpec
 tests specs = testGroup ""
   [ testGroup "Range Spec"              $ map (rangeSpecs id) specs
   , testGroup "Range Spec (with Cache)" $ map (rangeSpecs analyze) specs
+  , testGroup "Parsing errors" parseErrorSpecs
   ]
+
+parseErrorSpecs =
+  [ testParseError "has()" "expects 2 arguments, got 0"
+  ]
+  where
+    testParseError query expected = testCase query $
+      case expand emptyState (T.pack query) of
+        Left err -> expected `isInfixOf` show err @?
+                      ("Expected error to include: " <> expected <> "\nError was:\n" <> show err)
+        Right _  -> assertFailure "Was a valid parse"
 
 rangeSpecs transform (spec, state) =
   testGroup (takeBaseName (_path spec)) $ map (specTest $ transform state) (_cases spec)
