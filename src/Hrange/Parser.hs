@@ -106,7 +106,7 @@ closing c = char c <?> "closing " <> [c]
 function :: RangeParser
 function = do
   name  <- try (many1 alphaNum <* char '(')
-  exprs <- ((outerExpr <?> "expression") `sepBy` char ';') <* (closing ')')
+  exprs <- ((outerExpr <?> "expression") `sepBy` char ';') <* closing ')'
 
   mkFunction name exprs
 
