@@ -103,10 +103,13 @@ tests specs = testGroup ""
   ]
 
 parseErrorSpecs =
-  [ testParseError "has()" "expects 2 arguments, got 0"
+  [ testParseError "has()" "expecting 2 arguments, got 0"
+  , testParseError "has(" "expecting expression or closing )"
+  , testParseError "has(a;)" "unexpected \")\""
+  , testParseError "(" "expecting expression or closing )"
   ]
   where
-    testParseError query expected = testCase query $
+    testParseError query expected = testCase (query <> " / " <> expected) $
       case expand emptyState (T.pack query) of
         Left err -> expected `isInfixOf` show err @?
                       ("Expected error to include: " <> expected <> "\nError was:\n" <> show err)

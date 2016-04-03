@@ -12,6 +12,7 @@ import           Hrange.Types
 
 import           Control.Applicative
 import           Control.Monad.Identity (Identity)
+import           Data.Monoid            ((<>))
 import qualified Data.Text              as T
 import           Data.Text.Format
 import qualified Data.Text.Lazy         as TL
@@ -74,9 +75,9 @@ innerExprWithExcludes excludes =
   ) <* spaces
 
   where
-    constantQ      = mkConst <$> (string "q(" *> many (noneOf ")")  <* char ')')
-    constantQuotes = mkConst <$> (string "\"" *> many (noneOf "\"") <* char '"')
-    parentheses    = char '(' *> (try outerExpr <|> nothing) <* char ')'
+    constantQ      = mkConst <$> (string "q(" *> many (noneOf ")")  <* closing ')')
+    constantQuotes = mkConst <$> (string "\"" *> many (noneOf "\"") <* closing '"')
+    parentheses    = char '(' *> (nothing <* closing ')' <|> (outerExpr <?> "expression") <* closing ')')
     defaultClusterLookup = functionShortcut '@' $ ClusterLookup defaultCluster
     defaultMemLookup     = functionShortcut '?' $ FunctionMem defaultCluster
 
@@ -90,16 +91,22 @@ clusterLookup = ClusterLookup
     keysExpr = char ':' *> innerExpr
 
 localClusterLookup :: RangeParser
-localClusterLookup = maybe (fail "no local cluster")
-  (functionShortcut '$' . ClusterLookup) =<< getState
+localClusterLookup = do
+  ex    <- char '$' *> innerExprCluster
+  state <- getState
+
+  maybe (fail "no local cluster") (\x -> return . ClusterLookup x $ ex) state
 
 functionShortcut :: Char -> (Expression -> Expression) -> RangeParser
 functionShortcut c f = f <$> (char c *> innerExprCluster)
 
+closing :: Stream s m Char => Char -> ParsecT s u m Char
+closing c = char c <?> "closing " <> [c]
+
 function :: RangeParser
 function = do
   name  <- try (many1 alphaNum <* char '(')
-  exprs <- outerExpr `sepBy` char ';' <* char ')'
+  exprs <- ((outerExpr <?> "expression") `sepBy` char ';') <* (closing ')')
 
   mkFunction name exprs
 
@@ -115,7 +122,7 @@ function = do
       if length exprs == expected then
         return . f $ exprs
       else
-        fail . TL.unpack $ format "{}() expects {} arguments, got {}"
+        fail . TL.unpack $ format "{}() expecting {} arguments, got {}"
                              (name, expected, length exprs)
 
 clustersFunction :: RangeParser
