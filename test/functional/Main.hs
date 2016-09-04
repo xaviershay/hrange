@@ -44,8 +44,8 @@ listDirectories path = do
       return (path:concat ds')
     else return []
 
-loadRangeSpecs :: FilePath -> IO [(RangeSpec, Hrange.State)]
-loadRangeSpecs dir = do
+loadExpandSpecs :: FilePath -> IO [(RangeSpec, Hrange.State)]
+loadExpandSpecs dir = do
   (state, _) <- loadStateFromDirectory dir
   specs <- getDirectoryContents dir
   let specs' = map (\x -> joinPath [dir, x]) $ filter (isSuffixOf ".spec") specs
@@ -67,10 +67,10 @@ main :: IO ()
 main = do
   specPath <- lookupEnv "RANGE_SPEC_PATH"
 
-  dirs <- maybe (return []) (\x -> listDirectories (x ++ "/spec/expand")) specPath
+  expandDirs <- maybe (return []) (\x -> listDirectories (x ++ "/spec/expand")) specPath
 
-  specs <- mapM loadRangeSpecs dirs
-  let specs' = concat specs
+  expandSpecs <- mapM loadExpandSpecs expandDirs
+  let specs' = concat expandSpecs
   defaultMain (tests specs')
 
 eol = char '\n'
