@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 -- |An experimental haskell implementation of the range query language. It is
 -- an expressive grammar for selecting information out of arbitrary,
 -- self-referential metadata. It was developed for querying information about
@@ -120,7 +122,9 @@ import           Control.Lens         ((&), (.~), (^.))
 import qualified Data.HashMap.Strict  as M
 import qualified Data.HashSet         as S
 import qualified Data.Text            as T
-import           Data.List            (sort)
+import           Data.List            (sort, sortBy)
+import           Data.Monoid          ((<>))
+import           Data.Ord             (comparing)
 import           System.FilePath      (takeBaseName)
 import           System.FilePath.Find (always, extension, find, (==?))
 
@@ -169,7 +173,21 @@ expandDebug state query = do
 -- >>> compress (expand emptyState "n1,n2")
 -- "n1..2"
 compress :: Result -> Query
-compress = T.intercalate (T.pack ",") . sort . S.toList
+compress result = b
+  where
+    a = M.fromListWith (<>) . map extractDomain . S.toList $ result
+    b = join . map toUnion . map sortTokens . sortBy (comparing fst) . M.toList $ a
+
+    extractDomain :: Query -> (Query, [Query])
+    extractDomain s = (T.dropWhile ((/=) '.') s, [T.takeWhile ((/=) '.') s])
+
+    sortTokens (domain, tokens) = (domain, sort tokens)
+
+    toUnion ("", tokens)      = join tokens
+    toUnion (domain, [token]) = token <> domain
+    toUnion (domain, tokens)  = "{" <> join tokens <> "}" <> domain
+
+    join = T.intercalate ","
 
 -- |Load a directory of @.yaml@ files into a State. Each file represents a single
 -- cluster. Any path that cannot be parsed is returned in the second element of
