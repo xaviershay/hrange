@@ -170,8 +170,8 @@ expandDebug state query = do
 --
 -- The current implementation is naive and doesn't actually compress ranges.
 --
--- >>> compress (expand emptyState "n1,n2")
--- "n1..2"
+-- >>> compress (expand emptyState "n1,n2,n3")
+-- "n1..3"
 compress :: Result -> Query
 compress result = b
   where
