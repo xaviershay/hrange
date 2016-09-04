@@ -13,6 +13,7 @@ import           Hrange.Types
 import           Control.Applicative
 import           Control.Monad.Identity (Identity)
 import           Data.Char              (isDigit)
+import           Data.List              (tails)
 import           Data.Monoid            ((<>))
 import qualified Data.Text              as T
 import           Data.Text.Format
@@ -154,31 +155,43 @@ productExpr excludes = unwrap
 
 numericRange :: RangeParser
 numericRange = do
-  prefix  <- many (letter <|> digit)
-  _       <- string ".."
+  (prefixCandidate, bottomCandidate)  <- parseBottom
+  _                                   <- string ".."
+  (prefix2, top)                      <- choice (map parseTopPrefix . tails $
+                                                 prefixCandidate)
 
-  let bottom' = reverse $ takeWhile isDigit (reverse prefix)
-  let prefix' = take (length prefix - length bottom') prefix
-
-  (prefix2', top) <- choice (map parseTopPrefix . T.tails . T.pack $ prefix')
-
-  if bottom' == "" then
-    fail "No digit at right of prefix"
-  else if prefix2' == commonSuffix [prefix', prefix2'] then
-    let diff     = length bottom' - length top in
-    let prefix'' = prefix' ++ take diff bottom' in
-    let bottom   = drop diff bottom' in
-    let result   = NumericRange (T.pack prefix'') (length bottom)
-                     <$> readMaybe bottom
-                     <*> readMaybe top
-                     in
+  if prefix2 == commonSuffix [prefixCandidate, prefix2] then
+    let diff   = length bottomCandidate - length top in
+    let prefix = prefixCandidate ++ take diff bottomCandidate in
+    let bottom = drop diff bottomCandidate in
+    let result = NumericRange (T.pack prefix) (length bottom)
+                   <$> readMaybe bottom
+                   <*> readMaybe top
+                   in
     maybe (fail "Bottom or top were not ints") return result
   else
     fail "Second prefix in range must be common to first prefix"
 
   where
+    parseBottom = do
+      x <- many1 (letter <|> digit)
+
+      let bottom = rtakeWhile isDigit x
+      let prefix = rdrop (length bottom) x
+
+      if bottom == "" then
+        fail "No digit at right of prefix"
+      else
+        return (prefix, bottom)
+
+    rtakeWhile :: (a -> Bool) -> [a] -> [a]
+    rtakeWhile f = reverse . takeWhile f . reverse
+
+    rdrop :: Int -> [a] -> [a]
+    rdrop n xs = take (length xs - n) xs
+
     parseTopPrefix prefix = do
-      p   <- try (string . T.unpack $ prefix)
+      p   <- try (string prefix)
       top <- many1 digit
 
       return (p, top)
