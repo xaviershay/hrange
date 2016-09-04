@@ -35,3 +35,9 @@ must be done for any update. For hrange, I intend to store the fully parsed and
 normalized queries. I hope that this, combined with lazy evaluation, will allow
 for similar performance while not requiring a cache. **Update: nope, cache
 still necessary.**
+
+## Development
+
+    export RANGE_SPEC_PATH=~/Code/range-spec
+    stack test                                      # Run all tests
+    stack test --test-arguments '-m "name of spec"' # Run individual test
