@@ -17,6 +17,7 @@ library
   hs-source-dirs:      src
   exposed-modules:     Hrange
   other-modules:       Hrange.Evaluator
+                     , Hrange.Compress
                      , Hrange.Parser
                      , Hrange.Text
                      , Hrange.Types
@@ -30,6 +31,7 @@ library
                      , hashable
                      , lens
                      , mtl
+                     , natural-sort
                      , parsec
                      , regex-tdfa
                      , scientific
@@ -89,6 +91,7 @@ test-suite hrange-internal-test
   main-is:             Main.hs
   other-modules:       Hrange
                      , Hrange.Evaluator
+                     , Hrange.Compress
                      , Hrange.Parser
                      , Hrange.Types
                      , Hrange.Yaml
@@ -105,6 +108,7 @@ test-suite hrange-internal-test
                      , hashable
                      , lens
                      , mtl
+                     , natural-sort
                      , parsec
                      , regex-tdfa
                      , scientific

@@ -122,12 +122,10 @@ import           Control.Lens         ((&), (.~), (^.))
 import qualified Data.HashMap.Strict  as M
 import qualified Data.HashSet         as S
 import qualified Data.Text            as T
-import           Data.List            (sort, sortBy)
-import           Data.Monoid          ((<>))
-import           Data.Ord             (comparing)
 import           System.FilePath      (takeBaseName)
 import           System.FilePath.Find (always, extension, find, (==?))
 
+import           Hrange.Compress  (compress)
 import           Hrange.Evaluator (eval, runEval)
 import           Hrange.Parser    (ParseError, parseRange)
 import           Hrange.Types
@@ -163,31 +161,6 @@ expandDebug state query = do
   expression <- parseRange Nothing query
 
   return $ runEval state (eval expression)
-
--- |Normalizes a range result back into a query. This may not be a minimal
--- compression, but should be shorter in most cases that contain results with
--- repeated elements.
---
--- The current implementation is naive and doesn't actually compress ranges.
---
--- >>> compress (expand emptyState "n1,n2,n3")
--- "n1..3"
-compress :: Result -> Query
-compress result = b
-  where
-    a = M.fromListWith (<>) . map extractDomain . S.toList $ result
-    b = join . map toUnion . map sortTokens . sortBy (comparing fst) . M.toList $ a
-
-    extractDomain :: Query -> (Query, [Query])
-    extractDomain s = (T.dropWhile ((/=) '.') s, [T.takeWhile ((/=) '.') s])
-
-    sortTokens (domain, tokens) = (domain, sort tokens)
-
-    toUnion ("", tokens)      = join tokens
-    toUnion (domain, [token]) = token <> domain
-    toUnion (domain, tokens)  = "{" <> join tokens <> "}" <> domain
-
-    join = T.intercalate ","
 
 -- |Load a directory of @.yaml@ files into a State. Each file represents a single
 -- cluster. Any path that cannot be parsed is returned in the second element of
