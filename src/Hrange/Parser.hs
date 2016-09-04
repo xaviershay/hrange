@@ -1,6 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 
+-- Code to take a query string and turn it into an AST.
+--
+-- This module makes heavy use of parsec combinators and applicative operators
+-- (<$>, <*>, <*, *>).
+--
+-- http://jakewheat.github.io/intro_to_parsing/ is a good introduction to these
+-- concepts. Section 4 contains an explanation of the applicative operators.
+
 module Hrange.Parser
     ( parseRange
     , ParseResult
