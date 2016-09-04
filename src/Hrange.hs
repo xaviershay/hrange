@@ -120,6 +120,7 @@ import           Control.Lens         ((&), (.~), (^.))
 import qualified Data.HashMap.Strict  as M
 import qualified Data.HashSet         as S
 import qualified Data.Text            as T
+import           Data.List            (sort)
 import           System.FilePath      (takeBaseName)
 import           System.FilePath.Find (always, extension, find, (==?))
 
@@ -163,10 +164,12 @@ expandDebug state query = do
 -- compression, but should be shorter in most cases that contain results with
 -- repeated elements.
 --
+-- The current implementation is naive and doesn't actually compress ranges.
+--
 -- >>> compress (expand emptyState "n1,n2")
 -- "n1..2"
 compress :: Result -> Query
-compress = undefined
+compress = T.intercalate (T.pack ",") . sort . S.toList
 
 -- |Load a directory of @.yaml@ files into a State. Each file represents a single
 -- cluster. Any path that cannot be parsed is returned in the second element of
