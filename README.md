@@ -13,7 +13,6 @@ I am writing this to try to learn some things. My goals for Haskell include:
 Range goals include:
 
 * Allow online updating of data without requiring an expensive cache rebuild.
-* Rule based compression algorithm.
 * Providing an efficient consistent snapshot API, where clients can run multiple queries against the same set of data.
 * Provide an API for requesting multiple keys of a cluster. You can do this in
   vanilla range, but since results are returned as a set there is no way to
