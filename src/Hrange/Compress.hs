@@ -106,12 +106,10 @@ candidate token = let (prefix, _, _, matches) = matchToken token in
 outputRange :: Maybe NumericRange -> [Query] -> [Query]
 outputRange Nothing result = result
 outputRange (Just (priorPrefix, priorSuffix, startN, priorN)) result =
-    out:result
-  where
-    out = if startN == priorN then
-            priorPrefix <> startN <> priorSuffix
-          else
-            priorPrefix <> startN <> ".." <> dropZeroes priorN <> priorSuffix
+    (:result) (if startN == priorN then
+                priorPrefix <> startN <> priorSuffix
+              else
+                priorPrefix <> startN <> ".." <> dropZeroes priorN <> priorSuffix)
 
 -- This type signature looks weird, but it's the standard way to get match data
 -- out of a regex.

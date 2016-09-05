@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 -- |An experimental haskell implementation of the range query language. It is
 -- an expressive grammar for selecting information out of arbitrary,
 -- self-referential metadata. It was developed for querying information about
