@@ -123,6 +123,7 @@ import qualified Data.Text            as T
 import           System.FilePath      (takeBaseName)
 import           System.FilePath.Find (always, extension, find, (==?))
 
+import           Hrange.Compress  (compress)
 import           Hrange.Evaluator (eval, runEval)
 import           Hrange.Parser    (ParseError, parseRange)
 import           Hrange.Types
@@ -158,15 +159,6 @@ expandDebug state query = do
   expression <- parseRange Nothing query
 
   return $ runEval state (eval expression)
-
--- |Normalizes a range result back into a query. This may not be a minimal
--- compression, but should be shorter in most cases that contain results with
--- repeated elements.
---
--- >>> compress (expand emptyState "n1,n2")
--- "n1..2"
-compress :: Result -> Query
-compress = undefined
 
 -- |Load a directory of @.yaml@ files into a State. Each file represents a single
 -- cluster. Any path that cannot be parsed is returned in the second element of

@@ -44,8 +44,8 @@ listDirectories path = do
       return (path:concat ds')
     else return []
 
-loadRangeSpecs :: FilePath -> IO [(RangeSpec, Hrange.State)]
-loadRangeSpecs dir = do
+loadSpecs :: FilePath -> IO [(RangeSpec, Hrange.State)]
+loadSpecs dir = do
   (state, _) <- loadStateFromDirectory dir
   specs <- getDirectoryContents dir
   let specs' = map (\x -> joinPath [dir, x]) $ filter (isSuffixOf ".spec") specs
@@ -67,11 +67,16 @@ main :: IO ()
 main = do
   specPath <- lookupEnv "RANGE_SPEC_PATH"
 
-  dirs <- maybe (return []) (\x -> listDirectories (x ++ "/spec/expand")) specPath
+  expandDirs   <- maybe (return []) (\x -> listDirectories (x ++ "/spec/expand")) specPath
+  compressDirs <- maybe (return []) (\x -> listDirectories (x ++ "/spec/compress")) specPath
 
-  specs <- mapM loadRangeSpecs dirs
-  let specs' = concat specs
-  defaultMain (tests specs')
+  expandSpecs   <- mapM loadSpecs expandDirs
+  compressSpecs <- mapM loadSpecs compressDirs
+
+  let expandSpecs'   = concat expandSpecs
+  let compressSpecs' = concat compressSpecs
+
+  defaultMain (tests expandSpecs' compressSpecs')
 
 eol = char '\n'
 
@@ -96,9 +101,11 @@ rangeSingleSpec = do
 
 rangeSpec = many rangeSingleSpec
 
-tests specs = testGroup ""
-  [ testGroup "Range Spec"              $ map (rangeSpecs id) specs
-  , testGroup "Range Spec (with Cache)" $ map (rangeSpecs analyze) specs
+tests expandSpecs compressSpecs = testGroup ""
+  [ testGroup "Range Spec (expand)"            $ map (mkExpandTestGroup id) expandSpecs
+  , testGroup "Range Spec (expand with Cache)" $ map (mkExpandTestGroup analyze) expandSpecs
+  , testGroup "Range Spec (validate compress)" $ map (mkExpandTestGroup id) compressSpecs
+  , testGroup "Range Spec (compress)" $ map mkCompressTestGroup compressSpecs
   , testGroup "Parsing errors" parseErrorSpecs
   ]
 
@@ -115,12 +122,23 @@ parseErrorSpecs =
                       ("Expected error to include: " <> expected <> "\nError was:\n" <> show err)
         Right _  -> assertFailure "Was a valid parse"
 
-rangeSpecs transform (spec, state) =
-  testGroup (takeBaseName (_path spec)) $ map (specTest $ transform state) (_cases spec)
+mkExpandTestGroup transform (spec, state) =
+  testGroup (takeBaseName (_path spec)) $ map (expandTest $ transform state) (_cases spec)
 
-specTest state specCase =
+mkCompressTestGroup (spec, _) =
+  testGroup (takeBaseName (_path spec)) $ map compressTest (_cases spec)
+
+expandTest state specCase =
   testCase ("Evaluating \"" ++ T.unpack expr ++ "\"") $ expected @=? actual
   where
     expr   = _query specCase
     expected = Right $ _expected specCase
     actual = expand state expr
+
+compressTest specCase =
+  testCase ("Compressing \"" ++ T.unpack expr ++ "\"") $ expected @=? actual
+  where
+    expr     = _query specCase
+    expected = expr
+    actual   = compress $ _expected specCase
+
