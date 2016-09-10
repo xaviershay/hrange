@@ -37,6 +37,10 @@ still necessary.**
 
 ## Development
 
-    export RANGE_SPEC_PATH=~/Code/range-spec
+    git clone https://github.com/xaviershay/hrange.git
+    cd hrange
+    git submodule init
+    git submodule update
+
     stack test                                      # Run all tests
     stack test --test-arguments '-m "name of spec"' # Run individual test

@@ -65,13 +65,13 @@ doParse path handle = do
     Left err -> fail $ "Invalid spec file (" ++ path ++ "): " ++ show err
     Right x  -> return RangeSpec { _path = path, _cases = x }
 
--- TODO: Warn when RANGE_SPEC_PATH not set
 main :: IO ()
 main = do
-  specPath <- lookupEnv "RANGE_SPEC_PATH"
+  specPath' <- lookupEnv "RANGE_SPEC_PATH"
+  let specPath = maybe "range-spec" id specPath'
 
-  expandDirs   <- maybe (return []) (\x -> listDirectories (x ++ "/spec/expand")) specPath
-  compressDirs <- maybe (return []) (\x -> listDirectories (x ++ "/spec/compress")) specPath
+  expandDirs   <- listDirectories (specPath <> "/spec/expand")
+  compressDirs <- listDirectories (specPath <> "/spec/compress")
 
   expandSpecs   <- mapM loadSpecs expandDirs
   compressSpecs <- mapM loadSpecs compressDirs
