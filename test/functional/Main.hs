@@ -1,4 +1,3 @@
-{-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -63,8 +62,8 @@ doParse path handle = do
   contents <- hGetContents handle
 
   case parse rangeSpec path contents of
-    Left err -> fail $ "Invalid spec file (" ++ path ++ "): " ++ (show err)
-    Right x  -> return $ RangeSpec { _path = path, _cases = x }
+    Left err -> fail $ "Invalid spec file (" ++ path ++ "): " ++ show err
+    Right x  -> return RangeSpec { _path = path, _cases = x }
 
 -- TODO: Warn when RANGE_SPEC_PATH not set
 main :: IO ()
