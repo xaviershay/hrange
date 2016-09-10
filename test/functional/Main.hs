@@ -1,4 +1,3 @@
-{-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -46,29 +45,33 @@ listDirectories path = do
 
 loadSpecs :: FilePath -> IO [(RangeSpec, Hrange.State)]
 loadSpecs dir = do
-  (state, _) <- loadStateFromDirectory dir
-  specs <- getDirectoryContents dir
-  let specs' = map (\x -> joinPath [dir, x]) $ filter (isSuffixOf ".spec") specs
+  (state, invalid) <- loadStateFromDirectory dir
 
-  loadedSpecs <- mapM (\x -> withFile x ReadMode (doParse x)) specs'
+  case invalid of
+    [] -> do
+      specs <- getDirectoryContents dir
+      let specs' = map (\x -> joinPath [dir, x]) $ filter (isSuffixOf ".spec") specs
 
-  return $ map (\x -> (x, analyze state)) loadedSpecs
+      loadedSpecs <- mapM (\x -> withFile x ReadMode (doParse x)) specs'
+
+      return $ map (\x -> (x, analyze state)) loadedSpecs
+    _  -> fail $ "Could not parse YAML in range spec: " <> show invalid
 
 doParse :: String -> Handle -> IO RangeSpec
 doParse path handle = do
   contents <- hGetContents handle
 
   case parse rangeSpec path contents of
-    Left err -> fail $ "Invalid spec file (" ++ path ++ "): " ++ (show err)
-    Right x  -> return $ RangeSpec { _path = path, _cases = x }
+    Left err -> fail $ "Invalid spec file (" ++ path ++ "): " ++ show err
+    Right x  -> return RangeSpec { _path = path, _cases = x }
 
--- TODO: Warn when RANGE_SPEC_PATH not set
 main :: IO ()
 main = do
-  specPath <- lookupEnv "RANGE_SPEC_PATH"
+  specPath' <- lookupEnv "RANGE_SPEC_PATH"
+  let specPath = maybe "range-spec" id specPath'
 
-  expandDirs   <- maybe (return []) (\x -> listDirectories (x ++ "/spec/expand")) specPath
-  compressDirs <- maybe (return []) (\x -> listDirectories (x ++ "/spec/compress")) specPath
+  expandDirs   <- listDirectories (specPath <> "/spec/expand")
+  compressDirs <- listDirectories (specPath <> "/spec/compress")
 
   expandSpecs   <- mapM loadSpecs expandDirs
   compressSpecs <- mapM loadSpecs compressDirs

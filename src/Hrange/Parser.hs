@@ -105,7 +105,10 @@ localClusterLookup = do
   ex    <- char '$' *> innerExprCluster
   state <- getState
 
-  maybe (fail "no local cluster") (\x -> return . ClusterLookup x $ ex) state
+  maybe
+    (return $ Product [mkConst "$", ex])
+    (\x -> return . ClusterLookup x $ ex)
+    state
 
 functionShortcut :: Char -> (Expression -> Expression) -> RangeParser
 functionShortcut c f = f <$> (char c *> innerExprCluster)
