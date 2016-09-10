@@ -46,13 +46,17 @@ listDirectories path = do
 
 loadSpecs :: FilePath -> IO [(RangeSpec, Hrange.State)]
 loadSpecs dir = do
-  (state, _) <- loadStateFromDirectory dir
-  specs <- getDirectoryContents dir
-  let specs' = map (\x -> joinPath [dir, x]) $ filter (isSuffixOf ".spec") specs
+  (state, invalid) <- loadStateFromDirectory dir
 
-  loadedSpecs <- mapM (\x -> withFile x ReadMode (doParse x)) specs'
+  case invalid of
+    [] -> do
+      specs <- getDirectoryContents dir
+      let specs' = map (\x -> joinPath [dir, x]) $ filter (isSuffixOf ".spec") specs
 
-  return $ map (\x -> (x, analyze state)) loadedSpecs
+      loadedSpecs <- mapM (\x -> withFile x ReadMode (doParse x)) specs'
+
+      return $ map (\x -> (x, analyze state)) loadedSpecs
+    _  -> fail $ "Could not parse YAML in range spec: " <> show invalid
 
 doParse :: String -> Handle -> IO RangeSpec
 doParse path handle = do
