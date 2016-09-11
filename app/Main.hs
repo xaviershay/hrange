@@ -19,41 +19,59 @@ import           Network.Wai.Handler.Warp
 import           System.Environment       (getArgs)
 import           System.Microtimer        (time)
 import           System.Timeout           (timeout)
+import           Control.Concurrent       (forkIO, threadDelay)
+import           Control.Monad            (forever)
+import Control.Concurrent.STM
 
 main :: IO ()
 main = do
     args  <- getArgs
 
+    let stateDir = head args
+
     _ <- spawnLogThread
+    stateContainer <- atomically (newTVar emptyState)
 
-    logInfo $ fromText "Loading state"
+    reloadState stateDir stateContainer
 
-    (dt, (state, _)) <- time $ loadStateFromDirectory (head args)
-    logInfo $ build "Loaded state in {}, Analyzing..." (Only $ fixed 4 dt)
+    _ <- forkIO . forever $ do
+           threadDelay defaultReload
+           reloadState stateDir stateContainer
 
     let port = 3000
-
-    (dt', analyzedState) <- time $ evaluate (analyze' state)
-
-    logInfo $ build "Analyzed state in {}" (Only $ fixed 4 dt')
     logInfo $ build "Listening on port {}" (Only port)
-    run port (app analyzedState)
 
-app :: State -> Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived
-app state req respond = do
-    (dt, response) <- withTimeoutResponse defaultTimeout $
-                      withValidQuery req $
-                      rangeResponse state
+    run port (app stateContainer)
 
-    let rawQuery = T.drop 1 . decodeUtf8With lenientDecode $ rawQueryString req
+reloadState :: FilePath -> TVar State -> IO ()
+reloadState stateDir stateContainer = do
+    logInfo $ fromText "Loading state"
+    (dt, (state, _)) <- time $ loadStateFromDirectory stateDir
+    logInfo $ build "Loaded state in {}, Analyzing..." (Only $ fixed 4 dt)
+    (dt', analyzedState) <- time $ evaluate (analyze' state)
+    logInfo $ build "Analyzed state in {}" (Only $ fixed 4 dt')
 
-    logInfoReq req $ build "{} {} \"{}\""
-      (fixed 4 dt, responseCode response, rawQuery)
+    atomically (writeTVar stateContainer analyzedState)
 
-    respond response
+app :: TVar State -> Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived
+app stateContainer req respond = do
+      state          <- atomically (readTVar stateContainer)
+      (dt, response) <- withTimeoutResponse defaultTimeout $
+                        withValidQuery req $
+                        rangeResponse state
+
+      let rawQuery = T.drop 1 . decodeUtf8With lenientDecode $ rawQueryString req
+
+      logInfoReq req $ build "{} {} \"{}\""
+        (fixed 4 dt, responseCode response, rawQuery)
+
+      respond response
 
 defaultTimeout :: Int
 defaultTimeout = 300000
+
+defaultReload :: Int
+defaultReload = 60 * 1000000 -- One minute
 
 withTimeoutResponse :: Int -> Response -> IO (Double, Response)
 withTimeoutResponse t f = do

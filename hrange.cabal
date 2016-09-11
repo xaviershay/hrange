@@ -59,6 +59,7 @@ executable hrange-server
                      , microtimer
                      , pretty-show
                      , regex-tdfa
+                     , stm
                      , text
                      , text-format
                      , time
