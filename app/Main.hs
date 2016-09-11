@@ -5,7 +5,10 @@ module Main where
 import           Hrange
 import           Logging
 
+import           Control.Concurrent       (forkIO, threadDelay)
+import           Control.Concurrent.STM
 import           Control.Exception        (evaluate)
+import           Control.Monad            (forever)
 import           Data.Foldable            (toList)
 import           Data.Maybe               (fromMaybe)
 import qualified Data.Text                as T
@@ -17,17 +20,17 @@ import           Network.HTTP.Types       (Status, mkStatus, status200,
 import           Network.Wai
 import           Network.Wai.Handler.Warp
 import           System.Environment       (getArgs)
+import           System.Exit              (die)
 import           System.Microtimer        (time)
 import           System.Timeout           (timeout)
-import           Control.Concurrent       (forkIO, threadDelay)
-import           Control.Monad            (forever)
-import Control.Concurrent.STM
 
 main :: IO ()
 main = do
     args  <- getArgs
 
-    let stateDir = head args
+    stateDir <- case args of
+                  [x] -> return x
+                  _   -> die "Usage: hrange-server path/to/state"
 
     _ <- spawnLogThread
     stateContainer <- atomically (newTVar emptyState)
