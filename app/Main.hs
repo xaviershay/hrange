@@ -4,10 +4,12 @@ module Main where
 
 import           Hrange
 import           Logging
+import           State
 
 import           Control.Concurrent       (forkIO, threadDelay)
 import           Control.Concurrent.STM
 import           Control.Exception        (evaluate)
+import           Control.Lens             ((^.))
 import           Control.Monad            (forever)
 import           Data.Foldable            (toList)
 import           Data.Maybe               (fromMaybe)
@@ -33,7 +35,7 @@ main = do
                   _   -> die "Usage: hrange-server path/to/state"
 
     _ <- spawnLogThread
-    stateContainer <- atomically (newTVar emptyState)
+    stateContainer <- atomically (newTVar newStateContainer)
 
     reloadState stateDir stateContainer
 
@@ -46,7 +48,7 @@ main = do
 
     run port (app stateContainer)
 
-reloadState :: FilePath -> TVar State -> IO ()
+reloadState :: FilePath -> TVar StateContainer -> IO ()
 reloadState stateDir stateContainer = do
     logInfo $ fromText "Loading state"
     (dt, (state, _)) <- time $ loadStateFromDirectory stateDir
@@ -54,21 +56,26 @@ reloadState stateDir stateContainer = do
     (dt', analyzedState) <- time $ evaluate (analyze' state)
     logInfo $ build "Analyzed state in {}" (Only $ fixed 4 dt')
 
-    atomically (writeTVar stateContainer analyzedState)
+    atomically (modifyTVar stateContainer (updateStateContainer "arst" analyzedState))
 
-app :: TVar State -> Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived
+app :: TVar StateContainer -> Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived
 app stateContainer req respond = do
-      state          <- atomically (readTVar stateContainer)
-      (dt, response) <- withTimeoutResponse defaultTimeout $
-                        withValidQuery req $
-                        rangeResponse state
+  existing <- atomically (readTVar stateContainer)
 
-      let rawQuery = T.drop 1 . decodeUtf8With lenientDecode $ rawQueryString req
+  let state = existing ^. mostRecent
 
-      logInfoReq req $ build "{} {} \"{}\""
-        (fixed 4 dt, responseCode response, rawQuery)
+  logInfo $ fromText (toIdentifier state)
 
-      respond response
+  (dt, response) <- withTimeoutResponse defaultTimeout $
+                    withValidQuery req $
+                    rangeResponse state
+
+  let rawQuery = T.drop 1 . decodeUtf8With lenientDecode $ rawQueryString req
+
+  logInfoReq req $ build "{} {} \"{}\""
+    (fixed 4 dt, responseCode response, rawQuery)
+
+  respond response
 
 defaultTimeout :: Int
 defaultTimeout = 300000

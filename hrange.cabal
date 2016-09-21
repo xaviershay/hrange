@@ -56,6 +56,8 @@ executable hrange-server
                      , hashable
                      , hrange
                      , http-types
+                     , lens
+                     , lrucache
                      , microtimer
                      , pretty-show
                      , regex-tdfa
@@ -64,6 +66,7 @@ executable hrange-server
                      , text-format
                      , time
                      , utf8-string
+                     , uuid
                      , wai
                      , wai-extra
                      , warp
