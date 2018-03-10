@@ -3,8 +3,6 @@
 -- self-referential metadata. It was developed for querying information about
 -- hosts across datacenters.
 --
--- /This is an incomplete work-in-progress that may never be completed. Do not use./
---
 -- The author of this library also authored
 -- <https://godoc.org/github.com/square/grange grange>, which explains any
 -- suspicious similarities between the two.
