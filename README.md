@@ -59,7 +59,7 @@ anywhere, but you can generate it locally or just read it in the source files.
     git submodule update
 
     stack test                                      # Run all tests
-    stack test --test-arguments '-m "name of spec"' # Run individual test
+    stack test --test-arguments '-p "name of spec"' # Run individual test
 
 The majority of the tests are defined by the
 [range-spec](https://github.com/square/range-spec) project, which is included
