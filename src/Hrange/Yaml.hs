@@ -1,3 +1,5 @@
+-- Functions for loading range clusters from YAML.
+
 module Hrange.Yaml
     ( parseYAML
     , decodeFileWithPath

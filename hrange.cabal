@@ -67,6 +67,7 @@ executable hrange-server
                      , wai
                      , wai-extra
                      , warp
+  other-modules:       Logging
   default-language:    Haskell2010
 
 executable ergh
@@ -94,6 +95,7 @@ test-suite hrange-internal-test
                      , Hrange.Evaluator
                      , Hrange.Compress
                      , Hrange.Parser
+                     , Hrange.Text
                      , Hrange.Types
                      , Hrange.Yaml
   build-depends:       base

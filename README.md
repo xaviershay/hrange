@@ -5,15 +5,17 @@ An experimental haskell implementation of the range query language.
 
 I am writing this to try to learn some things. My goals for Haskell include:
 
-* Use lenses for data manipulation.
-* Use a Monad stack for evaluation.
-* Apply LiquidHaskell refined types where useful.
-* Use STM (though I'm not really sure where this would be appropriate yet).
+* **[DONE]** Use lenses for data manipulation.
+* **[DONE]** Use a Monad stack for evaluation.
+* **[N/A]** Apply LiquidHaskell refined types where useful.
+* **[N/A]** Use STM (though I'm not really sure where this would be appropriate
+  yet).
 
 Range goals include:
 
 * Allow online updating of data without requiring an expensive cache rebuild.
-* Providing an efficient consistent snapshot API, where clients can run multiple queries against the same set of data.
+* Providing an efficient consistent snapshot API, where clients can run
+  multiple queries against the same set of data.
 * Provide an API for requesting multiple keys of a cluster. You can do this in
   vanilla range, but since results are returned as a set there is no way to
   programmatically map the values back to the requested keys.
@@ -22,6 +24,8 @@ Range goals include:
 
         for x in $(erg -e %blah); do echo $x $(erg "$x"); done
 
+Current status: parked. It's a fully working range implementation, but I
+never got around to any of the bonus goals listed above.
 
 ## Architecture differences from grange
 
@@ -33,7 +37,7 @@ this by using a precomputed cache, but that takes many seconds to rebuild and
 must be done for any update. For hrange, I intend to store the fully parsed and
 normalized queries. I hope that this, combined with lazy evaluation, will allow
 for similar performance while not requiring a cache. **Update: nope, cache
-still necessary.**
+still necessary. AST is much nicer to work with though.**
 
 ## Development
 
@@ -44,3 +48,7 @@ still necessary.**
 
     stack test                                      # Run all tests
     stack test --test-arguments '-m "name of spec"' # Run individual test
+
+The majority of the tests are defined by the
+[range-spec](https://github.com/square/range-spec) project, which is included
+as a submodule.

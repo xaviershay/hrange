@@ -160,9 +160,10 @@ expandDebug state query = do
 
   return $ runEval state (eval expression)
 
--- |Load a directory of @.yaml@ files into a State. Each file represents a single
--- cluster. Any path that cannot be parsed is returned in the second element of
--- the tuple with an error. Strict. Does not recurse into subdirectories.
+-- |Load a directory of @.yaml@ files into a State. Each file represents a
+-- single cluster. Any path that cannot be parsed is returned in the second
+-- element of the tuple with an error. Strict. Does not recurse into
+-- subdirectories.
 loadStateFromDirectory :: FilePath -> IO (State, [(FilePath, String)])
 loadStateFromDirectory dir = do
   yamls      <- find always (extension ==? ".yaml") dir

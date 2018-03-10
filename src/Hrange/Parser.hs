@@ -158,7 +158,8 @@ productExpr excludes = unwrap
   <$> many1 (try numericRange <|> try (identifier excludes) <|> productBraces)
 
   where
-    -- This unwrap isn't required, but makes reading parse trees much easier.
+    -- This unwrap isn't required, but makes reading parse trees (for debugging
+    -- purposes) much easier.
     unwrap [x] = x
     unwrap xs  = Product xs
 

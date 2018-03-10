@@ -2,6 +2,8 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE FlexibleInstances #-}
 
+-- Common data types from the library.
+
 -- TODO: These exports are a shit-show
 module Hrange.Types
   ( Identifier
@@ -70,6 +72,7 @@ makeShowableRegex x = do
 instance NFData ShowableRegex where
   rnf (ShowableRegex s r) = r `seq` rnf s
 
+-- The core range AST
 data Expression =
   Intersection Expression Expression |
   Difference Expression Expression |
@@ -109,6 +112,7 @@ type ClusterName = Identifier
 type ClusterKey = Identifier
 type ClusterPair = (ClusterName, ClusterKey)
 type ClusterMap = M.HashMap Identifier Cluster
+
 -- |A state to run queries against. Usually constructed with
 -- 'loadStateFromDirectory'.
 data State = State {
@@ -118,11 +122,13 @@ data State = State {
 
 makeLenses ''State
 instance NFData State
+--instance Hashable State
 
 -- |A minimal empty 'State'.
 emptyState :: State
 emptyState = State { _clusters = M.empty, _clusterCache = Nothing }
 
+-- Core monad transformer for evaluating an Expression against a State.
 type Eval a = WriterT (Seq.Seq RangeLog) (ReaderT State Identity) a
 
 -- Allows results to be folded together without needing to unwrap them first.
