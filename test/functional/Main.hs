@@ -83,22 +83,28 @@ main = do
 
 eol = char '\n'
 
+whitespace = many . oneOf $ " \t"
+
 comment = do
   _ <- char '#'
-  _ <- line
+  _ <- many1 (noneOf "\n")
+  _ <- optionMaybe eol
 
   return Nothing
 
 line = do
-  result <- many1 (noneOf "\n")
+  -- Specifically trim preceeding whitespace so that "blank" lines with only
+  -- spaces are not treated as lines (the subsequent many1 will fail)
+  result <- whitespace *> many1 (noneOf "\n")
   _      <- optionMaybe eol
+
   return $ Just result
 
 rangeSingleSpec = do
   _ <- many comment
   expr <- line
-  spec <- many (comment <|> line)
-  _    <- optionMaybe eol
+  spec <- many (comment <|> try line)
+  _    <- whitespace *> optionMaybe eol
 
   return $ RangeSpecCase (T.pack . fromJust $ expr) (S.fromList . map T.pack . catMaybes $ spec)
 
